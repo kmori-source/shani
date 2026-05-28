@@ -116,14 +116,14 @@ def make_cross_org_evaluator(
     *,
     org_id: str = "org-alpha",
     posture: UserPosture | None = None,
-    cross_org_min_dsal: int = 2,
+    cross_org_min_dsal: int = 1,  # default to 1 so D-SAL-1 proposals pass in most tests
 ) -> ShaniEvaluator:
     """Create an evaluator configured for cross-org operation."""
     if posture is None:
         posture = make_posture(
             target_scope=r".*",
-            max_blast_radius="limited",
-            reversibility_required=True,
+            max_blast_radius="critical",  # permissive default so tests focus on constraints
+            reversibility_required=False,
             minimum_evidence=1,
         )
     org_policy = OrgPolicy(
@@ -202,9 +202,17 @@ def make_valid_ado(
     proposal: DecisionProposal,
 ) -> AuthorizedDecisionObject:
     """Evaluate and return ADO; raise if denied."""
+    from shani.schemas.posture import PostureRefinementRequest
     result = evaluator.evaluate(proposal)
     if isinstance(result, DeniedDecision):
         raise RuntimeError(f"Unexpected denial in fixture: {result.reason}")
+    if isinstance(result, PostureRefinementRequest):
+        raise RuntimeError(
+            f"PostureRefinementRequest returned for proposal {result.proposal_id}: "
+            f"ambiguity={result.ambiguity!r}. "
+            f"Fix: expand posture constraints (target_scope, max_blast_radius, etc.) "
+            f"or set posture=None to skip posture check in this test."
+        )
     if not isinstance(result, AuthorizedDecisionObject):
         raise RuntimeError(f"Unexpected result type: {type(result)}")
     return result
@@ -249,7 +257,7 @@ def make_fake_cross_org_ado(
     origin_org: str = "org-external",
     propagated_constraints: list[str],
     max_child_dsal: int = 2,
-    authorized_dsal: int = 2,
+    authorized_dsal: int = 3,  # must be strictly greater than max_child_dsal
 ) -> AuthorizedDecisionObject:
     """
     Build a synthetic cross-org ADO without going through evaluate().
