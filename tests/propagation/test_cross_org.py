@@ -262,6 +262,7 @@ def test_cross_org_min_dsal_gate(suite: ConformanceSuite) -> None:
     )
 
     # Parent ADO authorised at D-SAL 2 — below the min for this child org
+    # max_child_dsal must be strictly less than authorized_dsal (schema invariant)
     low_dsal_parent = make_fake_cross_org_ado(
         origin_org="org-alpha",
         propagated_constraints=[
@@ -271,7 +272,7 @@ def test_cross_org_min_dsal_gate(suite: ConformanceSuite) -> None:
             "minimum_evidence:1",
         ],
         authorized_dsal=2,
-        max_child_dsal=2,
+        max_child_dsal=1,
     )
 
     # Low-risk proposal — D-SAL would normally be 1
