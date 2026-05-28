@@ -52,6 +52,10 @@ from shani.security.replay_store import (
     FileNonceStore,
 )
 
+# Fix: explicitly load from tests/conformance/
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../conformance"))
+
 from framework import ConformanceSuite  # tests/conformance/framework.py
 from fixtures import (  # tests/conformance/fixtures.py
     make_evaluator,
