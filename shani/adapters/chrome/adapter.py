@@ -1,0 +1,291 @@
+"""
+Shani Chrome Extension Adapter.
+
+Chrome拡張機能からのブラウザ操作リクエストを Shani ガバナンスで制御する。
+
+Flow:
+    content.js / background.js
+        ↓ message: {"action": "navigate", "target": "https://...", ...}
+    ChromeAdapter.handle_message()
+        ↓ DecisionProposal を構築 → gate.evaluate()
+    Shani (HITLGate or ShaniEvaluator)
+        ↓ D-SAL >= threshold → HITL待機 or 即時承認
+    ChromeAdapter
+        ↓ ADO → capability token 返却
+    Chrome Extension
+        ↓ POST /execute with token → アクション実行
+
+Usage:
+    from shani.adapters.chrome import ChromeAdapter, BrowserAction
+    from shani.hitl import HITLGate
+
+    adapter = ChromeAdapter(gate=hitl_gate, proposed_by="chrome-extension/v1")
+
+    # Chrome拡張からのメッセージを処理
+    result = adapter.handle_message({
+        "action": "navigate",
+        "target": "https://example.com",
+        "tab_url": "https://current-page.com",
+    })
+    # → {"approved": True, "token": "...", "allowed_ops": [...]}
+    # → {"approved": None, "request_id": "...", "status": "pending"}  (HITL)
+    # → {"approved": False, "reason": "..."}  (拒否)
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import uuid
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Any
+
+from ...schemas.decision import (
+    BlastRadius,
+    DecisionProposal,
+    DecisionScope,
+    DecisionType,
+    EvidenceItem,
+)
+from ...core.evaluator import DeniedDecision, ShaniEvaluator
+from ...hitl.approval.gate import HITLGate
+from ...boundary.capability import ExecutionBoundary, Capability
+
+logger = logging.getLogger("shani.adapter.chrome")
+
+GovernanceGate = ShaniEvaluator | HITLGate
+
+
+class BrowserAction(str, Enum):
+    """Chrome拡張が要求できるブラウザ操作の種別。"""
+    NAVIGATE = "navigate"
+    SCRAPE = "scrape"
+    SCREENSHOT = "screenshot"
+    FILL_FORM = "fill_form"
+    CLICK = "click"
+    INJECT_SCRIPT = "inject_script"
+    BROWSER_FETCH = "browser_fetch"  # fetch/XHR による外部リクエスト（Proxy インターセプト）
+
+
+# BrowserAction ごとのガバナンスポリシー
+# (DecisionType, BlastRadius, reversibility)
+BROWSER_ACTION_POLICY: dict[BrowserAction, tuple[DecisionType, BlastRadius, bool]] = {
+    BrowserAction.NAVIGATE:      (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
+    BrowserAction.SCRAPE:        (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
+    BrowserAction.SCREENSHOT:    (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
+    BrowserAction.FILL_FORM:     (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
+    BrowserAction.CLICK:         (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
+    BrowserAction.INJECT_SCRIPT: (DecisionType.BROWSER_ACTION, BlastRadius.SIGNIFICANT, False),
+    BrowserAction.BROWSER_FETCH: (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
+}
+
+
+class ChromeAdapter:
+    """
+    Chrome拡張機能からのメッセージを Shani ガバナンスに橋渡しするアダプター。
+
+    HTTP サイドカーから呼ばれることを想定しているが、
+    直接 Python から使用することも可能。
+    """
+
+    def __init__(
+        self,
+        gate: GovernanceGate,
+        proposed_by: str = "chrome-extension/v1",
+        timeout_minutes: int = 10,
+    ) -> None:
+        self._gate = gate
+        self._proposed_by = proposed_by
+        self._timeout_minutes = timeout_minutes
+        self._boundary = ExecutionBoundary(gate)
+
+        # token → Capability (承認済み)
+        self._caps: dict[str, Capability] = {}
+        # request_id → DecisionProposal (HITL待機中)
+        self._pending_proposals: dict[str, DecisionProposal] = {}
+        # dedup key "action:target" → request_id (HITL重複排除用)
+        self._pending_dedup: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def handle_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        """
+        Chrome拡張からのアクションリクエストを処理する。
+
+        Args:
+            message: {
+                "action": "navigate" | "scrape" | "screenshot" | "fill_form" | "click" | "inject_script" | "browser_fetch",
+                "target": "https://...",      # 対象URL
+                "tab_url": "https://...",     # 現在のタブURL（コンテキスト）
+                "args": {...},                # アクション固有の引数
+                "description": "...",        # 任意: 意図の説明
+                "confidence": 0.8,           # 任意: 信頼度 (0-1)
+                "evidence": [...],           # 任意: EvidenceItem リスト
+            }
+
+        Returns:
+            即時承認: {"approved": True, "token": "...", "allowed_ops": [...], "expires_at": "..."}
+            HITL待機: {"approved": None, "request_id": "...", "status": "pending"}
+            拒否:     {"approved": False, "reason": "..."}
+            エラー:   {"error": "..."}
+        """
+        raw_action = message.get("action", "")
+        try:
+            action = BrowserAction(raw_action)
+        except ValueError:
+            return {"error": f"Unknown browser action: '{raw_action}'. "
+                             f"Valid actions: {[a.value for a in BrowserAction]}"}
+
+        target = message.get("target", "unknown")
+        tab_url = message.get("tab_url", "")
+        description = message.get("description") or f"Browser {action.value}: {target}"
+        confidence = float(message.get("confidence", 0.8))
+
+        decision_type, blast_radius, reversibility = BROWSER_ACTION_POLICY[action]
+
+        evidence = [
+            EvidenceItem(
+                source="chrome-extension-context",
+                content=f"Tab: {tab_url}" if tab_url else "Tab: unknown",
+                confidence=0.7,
+            )
+        ]
+        for e in message.get("evidence", []):
+            evidence.append(EvidenceItem(
+                source=e.get("source", "chrome-extension"),
+                content=e.get("content", ""),
+                confidence=float(e.get("confidence", 0.8)),
+            ))
+
+        proposal = DecisionProposal(
+            decision_type=decision_type,
+            proposed_by=self._proposed_by,
+            description=description,
+            target=target,
+            scope=DecisionScope(asset_ids=[target]),
+            evidence=evidence,
+            confidence=confidence,
+            reversibility=reversibility,
+            blast_radius=blast_radius,
+            expires_at=datetime.now(tz=timezone.utc) + timedelta(minutes=self._timeout_minutes),
+        )
+
+        # D-SAL を確認して即時 or HITL パスを選択
+        effective_dsal = self._gate._get_effective_dsal(proposal)
+
+        if effective_dsal < self._gate._threshold:
+            # 即時承認パス
+            result = self._gate.evaluate(proposal)
+            if isinstance(result, DeniedDecision):
+                logger.warning("Chrome action DENIED | action=%s target=%s reason=%s",
+                               action.value, target, result.reason)
+                return {"approved": False, "reason": result.reason}
+
+            cap = self._boundary.issue_capability(result, proposal)
+            token = str(uuid.uuid4())
+            with self._lock:
+                self._caps[token] = cap
+
+            logger.info("Chrome action APPROVED | action=%s target=%s dsal=%s",
+                        action.value, target, result.authorized_dsal)
+            return {
+                "approved": True,
+                "token": token,
+                "allowed_ops": sorted(cap._allowed),
+                "expires_at": result.expires_at.isoformat(),
+                "decision_id": result.decision_id[:8],
+            }
+        else:
+            # HITL パス（非同期）
+            dedup_key = f"{action.value}:{target}"
+            with self._lock:
+                existing_id = self._pending_dedup.get(dedup_key)
+            if existing_id:
+                logger.info("Chrome action DEDUP HITL | action=%s target=%s → reusing %s",
+                            action.value, target, existing_id)
+                return {"approved": None, "request_id": existing_id, "status": "pending"}
+
+            try:
+                request_id = self._gate.submit(proposal)
+                with self._lock:
+                    self._pending_proposals[request_id] = proposal
+                    self._pending_dedup[dedup_key] = request_id
+                logger.info("Chrome action PENDING HITL | action=%s target=%s request_id=%s",
+                            action.value, target, request_id)
+                return {"approved": None, "request_id": request_id, "status": "pending"}
+            except Exception as exc:
+                return {"approved": False, "reason": str(exc)}
+
+    def collect(self, request_id: str) -> dict[str, Any]:
+        """
+        HITL 待機中のリクエストの結果をポーリングする。
+
+        Returns:
+            待機中:   {"status": "pending"}
+            承認済み: {"approved": True, "token": "...", ...}
+            拒否済み: {"approved": False, "reason": "..."}
+        """
+        with self._lock:
+            proposal = self._pending_proposals.get(request_id)
+
+        try:
+            result = self._gate.collect(request_id, proposal)
+        except RuntimeError:
+            return {"status": "pending"}
+        except KeyError as exc:
+            return {"error": str(exc)}
+
+        if isinstance(result, DeniedDecision):
+            with self._lock:
+                self._pending_proposals.pop(request_id, None)
+                self._pending_dedup = {k: v for k, v in self._pending_dedup.items() if v != request_id}
+            return {"approved": False, "reason": result.reason}
+
+        # ADO → Capability → token
+        cap = self._boundary.issue_capability(result, proposal)
+        token = str(uuid.uuid4())
+        with self._lock:
+            self._caps[token] = cap
+            self._pending_proposals.pop(request_id, None)
+            self._pending_dedup = {k: v for k, v in self._pending_dedup.items() if v != request_id}
+
+        return {
+            "approved": True,
+            "token": token,
+            "allowed_ops": sorted(cap._allowed),
+            "expires_at": result.expires_at.isoformat(),
+            "decision_id": result.decision_id[:8],
+        }
+
+    def execute(self, token: str, operation: str, target: str,
+                payload: dict | None = None) -> dict[str, Any]:
+        """
+        承認済みトークンを使ってアクションを実行する（single-use）。
+
+        Args:
+            token:     handle_message() または collect() で受け取ったトークン
+            operation: "http_get" | "http_post"
+            target:    実行対象 URL
+            payload:   http_post 時のボディ
+
+        Returns:
+            {"success": True, "result": ...}
+            {"success": False, "error": "..."}
+        """
+        with self._lock:
+            cap = self._caps.pop(token, None)
+
+        if cap is None:
+            return {"success": False, "error": "Invalid or already-used token"}
+
+        try:
+            if operation == "http_get":
+                result = cap.http_get(target)
+            elif operation == "http_post":
+                result = cap.http_post(target, payload or {})
+            else:
+                return {"success": False, "error": f"Unsupported operation: {operation}. "
+                                                    f"browser_action supports: http_get, http_post"}
+            return {"success": True, "result": result}
+        except Exception as exc:
+            return {"success": False, "error": str(exc), "type": type(exc).__name__}

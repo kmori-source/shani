@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shani"
+version = "0.4.0"
+description = "Decision Governance Layer for Autonomous AI Agents"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+keywords = ["agents", "governance", "decision", "autonomy", "ai-safety", "hitl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Security",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+# All optional — shani/_compat.py provides a pydantic shim for zero-dependency use
+dependencies = []
+
+[project.optional-dependencies]
+core = [
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+]
+crypto = [
+    "cryptography>=41.0",
+]
+langchain = [
+    "langchain-core>=0.2",
+    "langgraph>=0.1",
+]
+ollama = [
+    "langchain-ollama>=0.1",
+]
+all = [
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "cryptography>=41.0",
+    "langchain-core>=0.2",
+    "langgraph>=0.1",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "types-PyYAML",
+]
+
+[project.scripts]
+shani = "shani.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/shani"
+Documentation = "https://github.com/your-org/shani/blob/main/docs/"
+Specification = "https://github.com/your-org/shani/blob/main/spec/shani-v0.4.md"
+Issues = "https://github.com/your-org/shani/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["shani"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "shani/",
+    "policy/",
+    "spec/",
+    "docs/",
+    "examples/",
+    "tests/",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "RELEASING.md",
+    "LICENSE",
+    "pyproject.toml",
+    "MANIFEST.in",
+    "shani/cli/",
+    "shani/runtime/",
+    "shani/sdk/",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

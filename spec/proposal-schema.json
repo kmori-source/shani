@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kmori-source/shani/blob/main/spec/proposal-schema.json",
+  "title": "DecisionProposal",
+  "description": "The only input Shani accepts from an agent. A proposal is a request for authorization — it is NOT authorization itself. Agents MUST NOT act on a proposal alone.",
+  "type": "object",
+  "required": [
+    "decision_type",
+    "proposed_by",
+    "description",
+    "target",
+    "reversibility",
+    "blast_radius",
+    "confidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique identifier for this proposal. UUID v4 RECOMMENDED. Auto-generated if omitted."
+    },
+    "decision_type": {
+      "$ref": "#/$defs/DecisionType"
+    },
+    "proposed_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the agent submitting this proposal."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable description of the proposed action."
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The resource or system targeted by this proposal."
+    },
+    "scope": {
+      "$ref": "#/$defs/DecisionScope",
+      "description": "Scope constraints for this proposal."
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/EvidenceItem" },
+      "default": [],
+      "description": "Evidence supporting this proposal. Source trust affects risk scoring."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Agent's confidence in this proposal (0.0–1.0)."
+    },
+    "parent_decision_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "default": null,
+      "description": "For delegated decisions: the decision_id of the parent ADO."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Assumptions the agent is making. Drift in these triggers DIS signals."
+    },
+    "reversibility": {
+      "type": "boolean",
+      "description": "Whether this action is reversible. Irreversible actions require stricter governance."
+    },
+    "blast_radius": {
+      "$ref": "#/$defs/BlastRadius"
+    },
+    "delegation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this proposal requests delegation authority."
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "default": null,
+      "description": "Proposal expiry. Must be in the future. The resulting ADO may not outlast this."
+    },
+    "origin_org": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Originating organization ID for cross-org ADO issuance (SPEC §8.8)."
+    }
+  },
+  "$defs": {
+    "DecisionType": {
+      "title": "DecisionType",
+      "type": "string",
+      "enum": [
+        "remediation",
+        "configuration_change",
+        "data_access",
+        "network_action",
+        "delegation",
+        "policy_update",
+        "browser_action",
+        "agent_task",
+        "tool_call"
+      ]
+    },
+    "BlastRadius": {
+      "title": "BlastRadius",
+      "type": "string",
+      "enum": ["isolated", "limited", "significant", "critical"],
+      "description": "Estimated impact scope of this action."
+    },
+    "DecisionScope": {
+      "title": "DecisionScope",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "resource_types": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "geographic_boundary": {
+          "type": ["string", "null"],
+          "default": null
+        },
+        "max_affected_count": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "default": null
+        }
+      }
+    },
+    "EvidenceItem": {
+      "title": "EvidenceItem",
+      "type": "object",
+      "required": ["source", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Identifier of the evidence source. SELF_REPORTED sources receive trust multiplier 0.35."
+        },
+        "content": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": null
+        },
+        "raw_reference": {
+          "type": ["string", "null"],
+          "default": null
+        }
+      }
+    }
+  }
+}
