@@ -151,7 +151,7 @@ def make_posture(
     max_blast_radius: str = "limited",
     reversibility_required: bool = True,
     minimum_evidence: int = 1,
-    posture_signature: str | None = "propagation-test-sig",
+    posture_signature: str | None = None,  # None skips signature verification in PostureEngine
 ) -> UserPosture:
     return UserPosture(
         version="1.0",
