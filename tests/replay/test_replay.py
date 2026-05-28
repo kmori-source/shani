@@ -62,6 +62,7 @@ def _load(name, rel):
     p = pathlib.Path(__file__).parent / rel
     spec = importlib.util.spec_from_file_location(name, p)
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod  # ← この1行を追加
     spec.loader.exec_module(mod)
     return mod
 
