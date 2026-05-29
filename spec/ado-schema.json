@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kmori-source/shani/blob/main/spec/ado-schema.json",
+  "title": "AuthorizedDecisionObject",
+  "description": "ADO v5 — the exclusive authorization artifact issued by a Shani-compliant evaluator. An Execution Agent MUST NOT act without a valid, unexpired ADO whose signature has been verified.",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "proposal_hash",
+    "signature",
+    "authority",
+    "authorized_dsal",
+    "expires_at",
+    "exec_context"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Matches the DecisionProposal.decision_id this was issued for."
+    },
+    "proposal_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hex digest of the canonical DecisionProposal. Verifiers recompute this from the proposal to detect fake ADOs."
+    },
+    "signature": {
+      "type": "string",
+      "description": "Ed25519 signature chain hash over the canonical payload: {decision_id, authority, authorized_dsal, issued_at, expires_at, proposal_hash, nonce, delegation_rules, exec_context, propagated_constraints}. Any field modification invalidates this signature. Agents MUST verify before execution."
+    },
+    "authority": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human role or policy document that authorized this decision."
+    },
+    "authorized_dsal": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "D-SAL level granted. Upper bound on what the agent may do autonomously."
+    },
+    "delegation_rules": {
+      "$ref": "#/$defs/DelegationRules",
+      "description": "Bounds on child delegation chains. All four fields are included in the signed payload."
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Cryptographically random 32-byte token (hex-encoded, 64 chars). Included in signed payload. Consumed on first execution. Replay of this ADO fails because nonce is already registered in NonceStore."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this ADO was issued by Shani (UTC)."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this ADO expires (UTC). Agents MUST check expires_at > now() before execution."
+    },
+    "exec_context": {
+      "$ref": "#/$defs/ExecContext",
+      "description": "Execution metadata included in the signed payload."
+    },
+    "signature_chain": {
+      "type": ["object", "null"],
+      "description": "v5.2: Full ADO signature chain (authority_signature → boundary_signature). Serialized ADOSignatureChain.as_dict(). Present when multi-principal signing is configured. SPEC §4.6 SHOULD requirement.",
+      "default": null
+    },
+    "propagated_constraints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "v5.1: Constraints inherited from the originating principal's UserPosture for cross-org ADOs. MUST be included in the canonical signature payload. Mutation of these fields MUST break signature verification."
+    },
+    "origin_org": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "v5.1: Identifier of the originating organization for cross-org ADOs."
+    }
+  },
+  "$defs": {
+    "DelegationRules": {
+      "title": "DelegationRules",
+      "description": "Explicit bounds on what child delegation chains may do. All four fields are included in the signed payload.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_sub_decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DecisionType" },
+          "default": [],
+          "description": "Whitelist of DecisionType values children may propose. Empty = no delegation permitted."
+        },
+        "max_child_dsal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 0,
+          "description": "Maximum D-SAL a child ADO may be authorized at. Enforced invariant: max_child_dsal < parent.authorized_dsal."
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 0,
+          "description": "Remaining delegation hops allowed. Decremented by 1 at each delegation. 0 = leaf node, cannot delegate further."
+        },
+        "max_children": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Maximum number of direct child ADOs this ADO may spawn. 0 = no children permitted. Prevents fan-out attacks where one approval spawns thousands of agents."
+        }
+      }
+    },
+    "ExecContext": {
+      "title": "ExecContext",
+      "description": "Execution context carried by the ADO. Included in the signed payload.",
+      "type": "object",
+      "required": ["decision_type", "intent_binding"],
+      "additionalProperties": false,
+      "properties": {
+        "decision_type": {
+          "$ref": "#/$defs/DecisionType"
+        },
+        "intent_binding": {
+          "$ref": "#/$defs/IntentBinding"
+        },
+        "parent_decision_id": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "default": null
+        },
+        "constraints": {
+          "type": "object",
+          "default": {}
+        },
+        "rollback_policy": {
+          "oneOf": [
+            { "$ref": "#/$defs/RollbackPolicy" },
+            { "type": "null" }
+          ],
+          "default": null
+        }
+      }
+    },
+    "IntentBinding": {
+      "title": "IntentBinding",
+      "description": "Cryptographically bound statement of what this ADO authorizes. Included in ExecContext which is part of the signed payload.",
+      "type": "object",
+      "required": ["intent", "target", "scope_summary", "expected_effect", "reversibility"],
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope_summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reversibility": {
+          "type": "boolean"
+        },
+        "rollback_reference": {
+          "type": ["string", "null"],
+          "default": null
+        }
+      }
+    },
+    "RollbackPolicy": {
+      "title": "RollbackPolicy",
+      "type": "object",
+      "required": ["strategy", "rollback_window_seconds"],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rollback_window_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "automated": {
+          "type": "boolean",
+          "default": false
+        },
+        "rollback_agent": {
+          "type": ["string", "null"],
+          "default": null
+        }
+      }
+    },
+    "DecisionType": {
+      "title": "DecisionType",
+      "type": "string",
+      "enum": [
+        "remediation",
+        "configuration_change",
+        "data_access",
+        "network_action",
+        "delegation",
+        "policy_update",
+        "browser_action",
+        "agent_task",
+        "tool_call"
+      ]
+    }
+  }
+}

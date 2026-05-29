@@ -1,0 +1,22 @@
+# Shani Authority Configuration
+#
+# This file defines which human role holds authority at each D-SAL level.
+# Humans do not make decisions at runtime.
+# Humans define the boundaries. Shani enforces them.
+#
+# IMPORTANT: max_authorized_dsal sets the ceiling.
+# Proposals requesting a higher D-SAL are denied regardless of policy.
+
+authority:
+  D-SAL-0: any-operator        # Proposal only — human executes
+  D-SAL-1: SOC-Analyst         # Bounded automation
+  D-SAL-2: SecOps-Lead         # Supervised automation (delegation enabled)
+  D-SAL-3: Org-Policy          # Policy-governed automation
+  D-SAL-4: Board-Level         # Full autonomy (exceptional; requires board sign-off)
+
+# Maximum D-SAL level this deployment authorizes.
+# Change this only when organizational policy has been updated.
+max_authorized_dsal: 2
+
+# Kill switch can also be set here or via environment variable SHANI_KILL_SWITCH=true
+kill_switch: false

@@ -1,0 +1,27 @@
+{
+  "decision_type": "configuration_change",
+  "proposed_by": "release-bot/v1",
+  "description": "Deploy release v2.4.1 to production cluster prod-us-east-1",
+  "target": "k8s:prod-us-east-1/app/myservice",
+  "scope": {
+    "asset_ids": ["k8s:prod-us-east-1/app/myservice"],
+    "resource_types": ["k8s:deployment"],
+    "geographic_boundary": "us-east-1"
+  },
+  "evidence": [
+    {
+      "source": "ci-pipeline",
+      "content": "All 847 tests passed. Security scan: 0 high/critical CVEs.",
+      "confidence": 0.97
+    },
+    {
+      "source": "staging-canary",
+      "content": "Canary on staging-us-east-1 healthy for 24h. P99 latency -12ms vs baseline.",
+      "confidence": 0.93
+    }
+  ],
+  "confidence": 0.95,
+  "reversibility": true,
+  "blast_radius": "significant",
+  "expires_at": "2026-01-01T13:00:00+00:00"
+}
