@@ -52,16 +52,31 @@ from shani.security.replay_store import (
     FileNonceStore,
 )
 
-from framework import ConformanceSuite  # tests/conformance/framework.py
-from fixtures import (  # tests/conformance/fixtures.py
-    make_evaluator,
-    make_proposal,
-    make_valid_ado,
-    make_expired_ado,
-    past,
-    future,
-)
+# Fix: explicitly load from tests/conformance/
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../conformance"))
 
+import importlib.util, pathlib
+
+def _load(name, rel):
+    p = pathlib.Path(__file__).parent / rel
+    spec = importlib.util.spec_from_file_location(name, p)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+_fixtures = _load("_conformance_fixtures", "../conformance/fixtures.py")
+_framework = _load("_conformance_framework", "../conformance/framework.py")
+
+make_evaluator   = _fixtures.make_evaluator
+make_proposal    = _fixtures.make_proposal
+make_valid_ado   = _fixtures.make_valid_ado
+make_expired_ado = _fixtures.make_expired_ado
+past             = _fixtures.past
+future           = _fixtures.future
+
+ConformanceSuite = _framework.ConformanceSuite
 
 # ---------------------------------------------------------------------------
 # 1. Nonce Replay — SPEC §5.4
