@@ -345,6 +345,14 @@ pytest tests/security/test_risk_pipeline.py        # 4-component risk pipeline
 
 ## Documents
 
+### Tutorials
+
+- [`docs/tutorials/01_quickstart.md`](docs/tutorials/01_quickstart.md) — Get started in 5 minutes
+- [`docs/tutorials/02_langgraph_integration.md`](docs/tutorials/02_langgraph_integration.md) — Add Shani to your LangGraph agent (3 patterns)
+- [`docs/tutorials/03_hitl_slack.md`](docs/tutorials/03_hitl_slack.md) — Wire up Slack approvals for production HITL
+
+### Reference
+
 - [`spec/shani-v0.4.md`](spec/shani-v0.4.md) — Normative specification (takes precedence over code)
 - [`spec/threat-model.md`](spec/threat-model.md) — Threats and mitigations (18 threats)
 - [`spec/canonicalization.md`](spec/canonicalization.md) — Canonical serialization for signatures
