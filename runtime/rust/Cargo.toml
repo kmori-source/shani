@@ -1,0 +1,37 @@
+[package]
+name = "shani-runtime"
+version = "0.4.0"
+edition = "2021"
+description = "Shani Decision Governance Layer — Rust runtime"
+license = "Apache-2.0"
+repository = "https://github.com/kmori-source/shani"
+keywords = ["governance", "decision", "autonomy", "ai-safety"]
+categories = ["authentication"]
+rust-version = "1.75"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+thiserror = "1"
+zeroize = { version = "1", features = ["derive"] }
+
+# Optional Ed25519 support
+ed25519-dalek = { version = "2", features = ["rand_core"], optional = true }
+rand = { version = "0.8", optional = true }
+
+[features]
+default = ["hmac-signing"]
+hmac-signing = []
+ed25519 = ["dep:ed25519-dalek", "dep:rand"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[[example]]
+name = "basic_evaluation"
+path = "examples/basic_evaluation.rs"

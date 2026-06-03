@@ -1,0 +1,105 @@
+# Pattern 1: Pod内サイドカー
+#
+# nanoclaw コンテナと shani-sidecar コンテナを同一 Pod に配置する。
+# 同一 Pod は network namespace を共有するため、localhost で通信できる。
+#
+# スケールアウト: Deployment の replicas を増やすだけで
+#   nanoclaw + shani-sidecar のペアが複製される。
+# HITL state: in-memory（replicas=1 相当の独立インスタンス）。
+#   複数 Pod をまたいだ HITL 一元化が必要な場合は Pattern 2 を検討する。
+#
+# Usage:
+#   kubectl apply -f k8s-pod-sidecar.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanoclaw-with-shani-sidecar
+  labels:
+    app: nanoclaw-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nanoclaw-agent
+  template:
+    metadata:
+      labels:
+        app: nanoclaw-agent
+    spec:
+      containers:
+
+        # ── nanoclaw エージェントコンテナ ────────────────────────────────────
+        - name: nanoclaw-agent
+          image: nanoclaw:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # localhost で shani-sidecar に接続
+            - name: SHANI_HOST
+              value: "localhost"
+            - name: SHANI_PORT
+              value: "8765"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+        # ── Shani サイドカーコンテナ ─────────────────────────────────────────
+        - name: shani-sidecar
+          image: shani:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8765
+              name: http
+          env:
+            # Pod内なので 0.0.0.0 でバインドする（nanoclaw は localhost で接続）
+            - name: SHANI_HOST
+              value: "0.0.0.0"
+            - name: SHANI_PORT
+              value: "8765"
+            # D-SAL 2 以上でオペレーター承認を要求する
+            - name: HITL_DSAL
+              value: "2"
+            # 署名キー（本番環境では Secret 参照に変更する）
+            # - name: SHANI_SHANI_BOUNDARY_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: shani-secrets
+            #       key: boundary_key
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
+---
+# （オプション）nanoclaw エージェントの Service
+# 他のサービスからエージェントに到達する必要がある場合のみ作成する
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanoclaw-agent
+spec:
+  selector:
+    app: nanoclaw-agent
+  ports:
+    - name: agent
+      port: 8080
+      targetPort: 8080

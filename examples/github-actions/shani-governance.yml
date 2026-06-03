@@ -1,0 +1,76 @@
+name: Shani Governance Gate
+
+# Reusable workflow: evaluates a proposal.json and outputs the ADO.
+# The calling workflow must supply the proposal file path.
+#
+# Usage in your workflow:
+#
+#   jobs:
+#     deploy:
+#       uses: ./.github/workflows/shani-governance.yml
+#       with:
+#         proposal: ./proposal.json
+#         max_dsal: 3
+
+on:
+  workflow_call:
+    inputs:
+      proposal:
+        description: Path to the DecisionProposal JSON file
+        required: true
+        type: string
+      max_dsal:
+        description: Maximum authorized D-SAL (0–4)
+        required: false
+        default: '3'
+        type: string
+    outputs:
+      authorized:
+        description: true if the proposal was authorized
+        value: ${{ jobs.evaluate.outputs.authorized }}
+      decision_id:
+        description: ADO decision_id (first 8 chars)
+        value: ${{ jobs.evaluate.outputs.decision_id }}
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.shani.outputs.authorized }}
+      decision_id: ${{ steps.shani.outputs.decision_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Shani
+        run: pip install "shani[core]"
+
+      - name: Evaluate proposal with Shani
+        id: shani
+        run: |
+          set +e
+          shani evaluate "${{ inputs.proposal }}" \
+            --max-dsal "${{ inputs.max_dsal }}" \
+            --output json > /tmp/ado.json
+          EXIT_CODE=$?
+          set -e
+
+          cat /tmp/ado.json
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            DECISION_ID=$(jq -r '.decision_id // "unknown"' /tmp/ado.json | cut -c1-8)
+            echo "authorized=true"  >> $GITHUB_OUTPUT
+            echo "decision_id=$DECISION_ID" >> $GITHUB_OUTPUT
+            echo "✓ Proposal authorized (ADO: $DECISION_ID…)"
+          else
+            REASON=$(jq -r '.reason // "unknown"' /tmp/ado.json)
+            echo "authorized=false" >> $GITHUB_OUTPUT
+            echo "decision_id="     >> $GITHUB_OUTPUT
+            echo "✗ Proposal denied: $REASON"
+            exit 1
+          fi

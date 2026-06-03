@@ -1,0 +1,243 @@
+# Shani Decision Policy Configuration
+#
+# Authorization Kernel — five sections:
+#
+#   1. decision_policy:    DecisionType → minimum required D-SAL
+#   2. capability_matrix:  DecisionType → allowed Capability operations
+#   3. agent_registry:     agent_id → granted D-SAL + allowed types
+#   4. environment_rules:  keywords that identify high-risk targets
+#   5. authority_roles:    D-SAL level → human role name
+#
+# Authorization logic:
+#   agent.granted_dsal >= effective_dsal(decision_type + context)  → proceed
+#   capability_matrix[decision_type] → operations the ADO may unlock
+#
+# The capability_matrix is referenced by boundary/capability.py.
+# Nothing is hardcoded in application code. Changing this file changes permissions.
+
+# -----------------------------------------------------------------------
+# Section 1: Decision Policy
+# Each DecisionType maps to a base D-SAL (before context modifiers).
+# Conservative defaults — raise only with explicit policy justification.
+# -----------------------------------------------------------------------
+decision_policy:
+  remediation:          1   # Bounded: SOC Analyst level
+  configuration_change: 2   # Supervised: SecOps Lead sign-off
+  data_access:          1   # Read-only: minimal oversight
+  network_action:       2   # Policy-governed: network policy doc required
+  delegation:           3   # Policy-governed: sub-agent spawning is high-risk
+  policy_update:        4   # Board-level: changes governance itself
+  browser_action:       2   # Chrome/browser automation: supervised
+  agent_task:           1   # nanoclaw agent tool execution: bounded
+  tool_call:            1   # cowork/Claude API tool_use: bounded
+
+# -----------------------------------------------------------------------
+# Section 2: Capability Matrix
+#
+# Maps each DecisionType to the whitelist of Capability operations its ADO unlocks.
+# Operations not listed here cannot be executed by any ADO.
+#
+# Design principles:
+#   - Least privilege: list only what is necessary
+#   - Explicit: no implicit permission
+#   - Auditable: this YAML is the single source of truth
+#
+# Available operations:
+#   http_get      HTTP GET  (read)
+#   http_post     HTTP POST (create)
+#   http_put      HTTP PUT  (update)
+#   http_delete   HTTP DELETE (delete) ← high risk
+#   read_file     file read
+#   write_file    file write
+#   delete_file   file deletion ← high risk
+#   run_command   shell command execution ← highest risk
+# -----------------------------------------------------------------------
+capability_matrix:
+  data_access:
+    operations: [http_get, read_file]
+    note: "Read-only. No writes, deletes, or command execution."
+
+  configuration_change:
+    operations: [http_post, http_put, write_file]
+    note: "Configuration writes. No deletion or command execution."
+
+  remediation:
+    operations: [run_command, http_post, write_file]
+    note: "Remediation. No deletion (irreversible ops require policy_update level)."
+
+  network_action:
+    operations: [http_get, http_post, http_put]
+    note: "Network operations. No filesystem access."
+
+  delegation:
+    operations: [http_post]
+    note: "Delegation only. No direct execution operations."
+
+  policy_update:
+    operations: [http_post, http_put, write_file]
+    note: "Policy updates. Highest authority but deletion/commands require separate approval."
+
+  browser_action:
+    operations: [http_get, http_post]
+    note: "Browser automation. HTTP read/write only; no filesystem or command access."
+
+  agent_task:
+    operations: [http_get, http_post, read_file, run_command]
+    note: "nanoclaw agent tool execution. Run commands and HTTP allowed; writes deferred to configuration_change."
+
+  tool_call:
+    operations: [http_get, http_post, read_file, run_command]
+    note: "cowork/Claude API tool_use execution. Same as agent_task."
+
+# -----------------------------------------------------------------------
+# Section 3: OrgPolicy Absolute Constraints (v0.4 — SPEC §8.3)
+#
+# Organization-defined upper bounds on what any UserPosture may declare.
+# Cannot be overridden by individual principals.
+# Enforced at UserPosture registration and at PostureEngine evaluation.
+# -----------------------------------------------------------------------
+org_policy:
+  absolute_constraints:
+    max_blast_radius:    critical  # no UserPosture may exceed this
+    cross_org_min_dsal:  4         # minimum D-SAL for cross-org transitions (default: 4 = Board-level)
+    prod_reversibility:  false     # if true, irreversible ops on prod targets are always denied
+
+# -----------------------------------------------------------------------
+# Section 4: Agent Registry
+# Unregistered agents are denied by default.
+# Set allow_unregistered_agents: true only in development environments.
+#
+# v0.4: Agents may include a 'binding' section as a signed declaration
+# document (SPEC §8.7). Required fields: principal_id, signed_at.
+# The 'history' list is immutable — previous versions must not be deleted.
+# -----------------------------------------------------------------------
+allow_unregistered_agents: false
+
+agent_registry:
+
+  monitor-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null  # Set to Ed25519 public key in production
+    allowed_decision_types:
+      - remediation
+      - configuration_change
+    metadata:
+      team: soc
+      environment: production
+    # v0.4 Binding declaration (SPEC §8.7) — treated as signed document, not config.
+    # Requires simulation_ref to reference a completed PostureSimulation.
+    binding:
+      version: "1.0"
+      principal_id: "soc-lead@example.com"
+      signed_at: "2026-05-01T09:00:00Z"
+      intent_statement: "I delegate automated remediation and configuration changes to this agent for dev environments only."
+      simulation_ref: "sim-2026-05-01-monitor-agent-v1"
+      posture:
+        target_scope: "host:dev-.*"
+        max_blast_radius: limited
+        reversibility_required: true
+        minimum_evidence: 1
+      history:
+        - version: "0.9"
+          signed_at: "2026-04-01T10:00:00Z"
+          note: "Initial declaration."
+
+  network-scanner-agent/v0.9:
+    granted_dsal: 1
+    public_key_b64: null
+    allowed_decision_types:
+      - network_action
+    metadata:
+      team: infra
+      environment: production
+
+  orchestrator-agent/v1.0:
+    granted_dsal: 3
+    public_key_b64: null
+    allowed_decision_types:
+      - remediation
+      - configuration_change
+      - delegation
+      - network_action
+    metadata:
+      team: platform
+      environment: production
+
+  chrome-extension/v1:
+    granted_dsal: 3
+    public_key_b64: null
+    allowed_decision_types:
+      - browser_action
+      - data_access
+    metadata:
+      adapter: chrome
+
+  nanoclaw-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - agent_task
+      - data_access
+      - remediation
+      - configuration_change
+    metadata:
+      adapter: nanoclaw
+
+  cowork-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - tool_call
+      - data_access
+      - remediation
+      - configuration_change
+    metadata:
+      adapter: cowork
+
+# -----------------------------------------------------------------------
+# Section 5: Environment Rules
+#
+# Defines what constitutes a high-risk environment.
+# DSALCalculator applies an environment penalty (+risk) when the proposal
+# target contains any of these keywords (case-insensitive).
+#
+# high_risk_keywords:   triggers risk +1 when found in target
+# medium_risk_keywords: reserved for future use (risk +0.5)
+#
+# Add organization-specific keywords alongside the defaults.
+# -----------------------------------------------------------------------
+environment_rules:
+  high_risk_keywords:
+    - prod
+    - production
+    - live
+    - prd
+    - main
+    - master
+    # Add organization-specific keywords below:
+    # - customer-data
+    # - main-cluster
+    # - regulated
+    # - pci
+  medium_risk_keywords: []
+
+# -----------------------------------------------------------------------
+# Section 6: Authority Roles
+#
+# Maps each D-SAL level to the human role name shown in HITL notifications.
+# Customize for your organization.
+#
+# This overrides DEFAULT_AUTHORITY_MAP in authority/provider.py.
+# The HITL gate reads this to determine who to request approval from.
+# -----------------------------------------------------------------------
+authority_roles:
+  0: "any-operator"
+  1: "SOC-Analyst"
+  2: "SecOps-Lead"
+  3: "Org-Policy"
+  4: "Board-Level"
+  # Customize for your organization:
+  # 1: "SRE"
+  # 2: "Security-Engineer"
+  # 3: "CISO"
+  # 4: "Board-Level"
