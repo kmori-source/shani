@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kmori-source/shani/blob/main/spec/posture-schema.json",
+  "title": "UserPosture",
+  "description": "The structured expression of a principal's Binding (v0.4). Declares constraints within which an agent's proposals are considered within scope. Must be signed. Must remain within OrgPolicy.absolute_constraints.",
+  "type": "object",
+  "required": [
+    "version",
+    "principal_id",
+    "signed_at",
+    "intent_statement",
+    "simulation_ref",
+    "constraints"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Semver version of this posture declaration, e.g. '1.0'."
+    },
+    "principal_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identity of the principal declaring this posture."
+    },
+    "signed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of signature (UTC)."
+    },
+    "intent_statement": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable statement of delegation intent. Signed as part of the posture."
+    },
+    "simulation_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Reference to the PostureSimulationResult used at signing time. Required — prevents Binding Theater."
+    },
+    "constraints": {
+      "$ref": "#/$defs/PostureConstraints"
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PostureHistoryEntry" },
+      "default": [],
+      "description": "Immutable history of previous posture versions. Entries MUST NOT be deleted."
+    },
+    "posture_signature": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Base64-encoded Ed25519 or HMAC-SHA256 signature over canonical_content() (excludes posture_signature itself)."
+    }
+  },
+  "$defs": {
+    "PostureConstraints": {
+      "title": "PostureConstraints",
+      "description": "Constraints declared by a principal. These define the boundary of actions the principal accepts responsibility for. Must remain within OrgPolicy.absolute_constraints.",
+      "type": "object",
+      "required": [
+        "target_scope",
+        "max_blast_radius",
+        "reversibility_required",
+        "minimum_evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "target_scope": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Regex or glob pattern for allowed targets. e.g. 'host:dev-*'. Proposals with non-matching targets receive Layer 1 REJECT."
+        },
+        "max_blast_radius": {
+          "type": "string",
+          "enum": ["isolated", "limited", "significant", "critical"],
+          "description": "Maximum blast radius this principal accepts responsibility for. Proposals exceeding this receive Layer 1 REJECT."
+        },
+        "reversibility_required": {
+          "type": "boolean",
+          "description": "If true, irreversible proposals receive Layer 1 REJECT."
+        },
+        "minimum_evidence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum number of evidence items required. Proposals with fewer items receive Layer 1 REJECT."
+        }
+      }
+    },
+    "PostureHistoryEntry": {
+      "title": "PostureHistoryEntry",
+      "description": "Immutable record of a previous posture version. Must not be deleted.",
+      "type": "object",
+      "required": ["version", "signed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "signed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0",
+      "principal_id": "sarah@example.com",
+      "signed_at": "2026-05-01T09:00:00Z",
+      "intent_statement": "I delegate automated remediation to this agent for dev environments only.",
+      "simulation_ref": "sim-2026-05-01-a3f9",
+      "constraints": {
+        "target_scope": "host:dev-*",
+        "max_blast_radius": "limited",
+        "reversibility_required": true,
+        "minimum_evidence": 2
+      },
+      "history": [
+        {
+          "version": "0.9",
+          "signed_at": "2026-04-01T10:00:00Z",
+          "note": "Initial declaration. Scope included staging."
+        }
+      ]
+    }
+  ]
+}
