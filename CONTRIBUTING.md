@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing. Before opening a pull request, read this document in full. It is short. It is not optional.
 
+> **Please open an issue before submitting a PR.** This project is at an early stage and the design is still evolving. An issue lets us align on approach before you invest time in implementation.
+
 ---
 
 ## What Shani is
