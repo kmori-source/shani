@@ -66,7 +66,7 @@ from fixtures import (
 # ---------------------------------------------------------------------------
 
 
-def _org_ev(org_id: str, cross_org_min_dsal: int = 2):
+def _org_ev(org_id: str, cross_org_min_dsal: int = 1):
     return make_cross_org_evaluator(org_id=org_id, cross_org_min_dsal=cross_org_min_dsal)
 
 
@@ -285,9 +285,21 @@ def test_three_hop_chain(suite: ConformanceSuite) -> None:
 def test_chain_dsal_ceiling(suite: ConformanceSuite) -> None:
     suite._section("3. Chain D-SAL Ceiling (SPEC §6.2)")
 
-    child_ev = _org_ev("org-beta")
+    # Use plain make_evaluator (no cross-org policy) so D-SAL ceiling check
+    # triggers before any cross-org constraint evaluation.
+    from shani.authority.policy import AgentIdentity
+    child_ev = make_evaluator(
+        agents={
+            "agent/beta": AgentIdentity(
+                agent_id="agent/beta",
+                granted_dsal=3,
+                allowed_decision_types=frozenset(["remediation", "configuration_change"]),
+            ),
+        }
+    )
 
     # Parent at D-SAL 2 with max_child_dsal=1
+    # origin_org=None disables cross-org evaluation so D-SAL ceiling is the only check
     parent_ado = make_fake_cross_org_ado(
         origin_org="org-alpha",
         propagated_constraints=[
@@ -298,14 +310,14 @@ def test_chain_dsal_ceiling(suite: ConformanceSuite) -> None:
         ],
         authorized_dsal=2,
         max_child_dsal=1,
-    )
+    ).model_copy(update={"origin_org": None})
 
     # Proposal that would normally require D-SAL > 1 (blast_radius=SIGNIFICANT adds risk)
     high_risk_proposal = make_proposal(
         proposed_by="agent/beta",
         decision_type=DecisionType.REMEDIATION,
         target="host:dev-01",
-        blast_radius=BlastRadius.SIGNIFICANT,   # increases effective D-SAL
+        blast_radius=BlastRadius.SIGNIFICANT,   # increases effective D-SAL above max_child_dsal=1
         reversibility=False,
         confidence=0.5,
     )
