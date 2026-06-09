@@ -149,6 +149,30 @@ const token = await fetch('/approve', { method: 'POST', body: JSON.stringify({..
 const result = await fetch('/execute', { method: 'POST', body: JSON.stringify({ token, ...}) })
 ```
 
+### nanoclaw (SKILL.md-based, zero TypeScript required)
+
+Shani integrates with nanoclaw via a Python sidecar and a SKILL.md
+that instructs Claude to call Shani before any high-risk operation.
+No code changes to nanoclaw required.
+
+```bash
+# Terminal 1: Start Shani sidecar
+SHANI_HITL_AUTO=approve python examples/nanoclaw_sidecar/start_sidecar.py
+
+# Terminal 2: Ask nanoclaw to do something risky
+pnpm run chat "Isolate host:prod-db-12. Evidence: EDR detected lateral movement (0.93), SIEM detected anomalous outbound traffic (0.88)"
+```
+
+Claude reads the Shani SKILL.md, submits a DecisionProposal with evidence,
+waits for HITL approval, and only proceeds after receiving a signed ADO:
+```bash
+[HITL] network_action → host:prod-db-12  authority=Org-Policy  dsal=3
+[HITL] ✓ Approved
+Decision ID: 2b2b8e5a  Authority: Org-Policy  DSAL: 3
+```
+
+See `examples/nanoclaw_sidecar/` and `container/skills/shani-governance/SKILL.md`.
+
 ### Chrome Extension
 
 ```python
