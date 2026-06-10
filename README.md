@@ -364,6 +364,7 @@ pytest tests/security/test_risk_pipeline.py        # 4-component risk pipeline
 | `examples/openclaw_integration/` | HTTP sidecar for non-Python agents |
 | `examples/agent_integration/` | Generic agent integration |
 | `examples/chrome_extension/` | Chrome extension adapter |
+| `examples/vuln_remediation/` | pip-audit + Shani governed auto-remediation |
 
 ---
 
