@@ -1,0 +1,202 @@
+name: Vulnerability Scan (Manual)
+
+# Manually triggered workflow that builds the shani dist artifacts,
+# verifies the package with `shani check`, then runs trivy / grype /
+# osv-scanner in parallel.  All scan results are uploaded as run
+# artifacts; no job fails on vulnerability findings by default.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Build dist and validate the package ────────────────────────
+  build:
+    name: Build dist & shani check
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: dist-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build distribution packages
+        run: |
+          pip install build
+          python -m build
+
+      - name: Install built wheel and run shani check
+        run: |
+          pip install dist/shani-*.whl
+          shani check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.run_id }}
+          path: dist/
+          retention-days: 7
+
+  # ── 2. Trivy ──────────────────────────────────────────────────────
+  trivy:
+    name: Trivy
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/
+
+      - name: Trivy vulnerability scan (repo)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          scanners: vuln
+          format: json
+          output: trivy-repo.json
+          exit-code: '0'
+
+      - name: Trivy vulnerability scan (dist)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: dist/
+          scanners: vuln
+          format: json
+          output: trivy-dist.json
+          exit-code: '0'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-results-${{ github.run_id }}
+          path: trivy-*.json
+          retention-days: 30
+
+  # ── 3. Grype ──────────────────────────────────────────────────────
+  grype:
+    name: Grype
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/
+
+      - name: Install Grype
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Grype vulnerability scan (repo)
+        run: grype dir:. --output json --file grype-repo.json
+        continue-on-error: true
+
+      - name: Grype vulnerability scan (dist)
+        run: grype dir:dist/ --output json --file grype-dist.json
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grype-results-${{ github.run_id }}
+          path: grype-*.json
+          retention-days: 30
+
+  # ── 4. OSV-Scanner ────────────────────────────────────────────────
+  osv-scanner:
+    name: OSV-Scanner
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist/
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: false
+
+      - name: Install OSV-Scanner
+        run: go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+
+      - name: Run OSV-Scanner
+        run: osv-scanner --format=json --output=osv-results.json ./
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: osv-results-${{ github.run_id }}
+          path: osv-results.json
+          retention-days: 30
+
+  # ── 5. Shani judgment ─────────────────────────────────────────────
+  shani-judge:
+    name: Shani Vulnerability Judgment
+    needs: [build, trivy, grype, osv-scanner]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.run_id }}
+          path: dist/
+
+      - name: Install shani from built wheel
+        run: pip install dist/shani-*.whl
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: trivy-results-${{ github.run_id }}
+          path: scan-results/trivy/
+        continue-on-error: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: grype-results-${{ github.run_id }}
+          path: scan-results/grype/
+        continue-on-error: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osv-results-${{ github.run_id }}
+          path: scan-results/osv/
+        continue-on-error: true
+
+      - name: Run Shani vulnerability judgment
+        env:
+          SHANI_HITL_AUTO: '1'
+        run: |
+          python examples/vuln-remediation/shani_vuln_judge.py \
+            --trivy  scan-results/trivy/trivy-repo.json \
+                     scan-results/trivy/trivy-dist.json \
+            --grype  scan-results/grype/grype-repo.json \
+                     scan-results/grype/grype-dist.json \
+            --osv    scan-results/osv/osv-results.json \
+            --output shani-audit.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shani-audit-${{ github.run_id }}
+          path: shani-audit.json
+          retention-days: 30
