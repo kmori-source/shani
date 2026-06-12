@@ -92,6 +92,7 @@ jobs:
 
     - name: Build Go project
       if: matrix.language == 'go'
+      working-directory: ./runtime/go  
       run: |
         go mod tidy
         go build ./...
