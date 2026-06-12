@@ -1,0 +1,41 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: shani-governance
+  labels:
+    app: shani-admission-webhook
+webhooks:
+  - name: validate.shani.io
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: shani-webhook
+        namespace: shani-system
+        path: /validate
+      # Replace with your CA bundle (base64-encoded PEM)
+      caBundle: Cg==
+    rules:
+      - apiGroups:
+          - apps
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - deployments
+          - pods
+          - replicasets
+          - statefulsets
+          - daemonsets
+          - configmaps
+          - secrets
+    # Only validate resources in namespaces labeled shani-governance=enabled
+    namespaceSelector:
+      matchLabels:
+        shani-governance: "enabled"
+    failurePolicy: Fail    # Deny on webhook failure (fail-closed)
+    sideEffects: None
+    timeoutSeconds: 10
