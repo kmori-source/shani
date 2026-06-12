@@ -59,3 +59,12 @@ agent_registry:
     metadata:
       team: soc
       environment: ci
+  vuln-remediation-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - remediation
+    metadata:
+      team: soc
+      environment: ci
+
