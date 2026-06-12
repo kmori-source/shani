@@ -68,7 +68,7 @@ from shani.hitl.approval.gate import HITLGate
 from shani.hitl.channel.channels import CallbackApprovalChannel, CLIApprovalChannel
 from shani.schemas.decision import DecisionProposal, EvidenceItem
 
-_POLICY_PATH = _ROOT / "policy" / "decision_policy.yaml"
+_POLICY_PATH = Path(__file__).parent / "policy.yaml"
 _AGENT_ID = "vuln-scan-judge/v1"
 
 # ---------------------------------------------------------------------------
@@ -223,9 +223,66 @@ def parse_osv(path: Path) -> list[Finding]:
                 )
     return findings
 
+def parse_sarif(path: Path) -> list[Finding]:
+    """Parse SARIF 2.1.0 output from VVAH or any SARIF-compliant scanner."""
+    try:
+        data = json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return []
+    
+    findings: list[Finding] = []
+    for run in data.get("runs", []):
+        rules = {
+            r["id"]: r 
+            for r in run.get("tool", {}).get("driver", {}).get("rules", [])
+        }
+        for result in run.get("results", []):
+            rule_id = result.get("ruleId", "unknown")
+            rule = rules.get(rule_id, {})
+            
+            # location
+            locations = result.get("locations", [])
+            file_path = "unknown"
+            if locations:
+                pl = locations[0].get("physicalLocation", {})
+                file_path = pl.get("artifactLocation", {}).get("uri", "unknown")
+            
+            # severity from SARIF level
+            level = result.get("level", "warning")
+            severity_map = {
+                "error": "HIGH",
+                "warning": "MEDIUM", 
+                "note": "LOW",
+                "none": "LOW",
+            }
+            
+            # prefer CVSS-based severity if available in properties
+            props = result.get("properties", {})
+            cvss_score = props.get("cvss_score")
+            severity = _severity_from_float(cvss_score) if cvss_score else severity_map.get(level, "MEDIUM")
+            
+            # skip FALSE_POSITIVE verdicts from VVAH
+            if props.get("verdict") == "FALSE_POSITIVE":
+                continue
+            
+            message = result.get("message", {}).get("text", "")
+            
+            findings.append(Finding(
+                vuln_id=rule_id,
+                package=file_path,
+                installed_version="n/a",
+                fix_version=props.get("recommendation"),
+                severity=severity,
+                description=(
+                    rule.get("fullDescription", {}).get("text", "") or message
+                )[:300],
+                source="sarif",
+            ))
+    
+    return findings
 
 def load_findings(
-    trivy: list[Path], grype: list[Path], osv: list[Path]
+    trivy: list[Path], grype: list[Path], osv: list[Path], sarif: list[Path] = []
 ) -> list[Finding]:
     all_findings: list[Finding] = []
     for p in trivy:
@@ -234,6 +291,8 @@ def load_findings(
         all_findings.extend(parse_grype(p))
     for p in osv:
         all_findings.extend(parse_osv(p))
+    for p in sarif:
+        all_findings.extend(parse_sarif(p))
 
     # Deduplicate by (package, vuln_id); keep highest-severity copy
     _order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
@@ -405,6 +464,7 @@ def main() -> None:
     parser.add_argument("--trivy", nargs="*", default=[], metavar="FILE")
     parser.add_argument("--grype", nargs="*", default=[], metavar="FILE")
     parser.add_argument("--osv", nargs="*", default=[], metavar="FILE")
+    parser.add_argument("--sarif", nargs="*", default=[], metavar="FILE")
     parser.add_argument(
         "--policy", default=str(_POLICY_PATH), metavar="FILE"
     )
@@ -436,6 +496,7 @@ def main() -> None:
         trivy=[Path(p) for p in args.trivy],
         grype=[Path(p) for p in args.grype],
         osv=[Path(p) for p in args.osv],
+        sarif=[Path(p) for p in args.sarif],
     )
     print(f"\n[load] {len(findings)} unique finding(s) after deduplication")
 
