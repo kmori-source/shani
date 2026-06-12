@@ -60,7 +60,7 @@ from shani.hitl.approval.gate import HITLGate
 from shani.hitl.channel.channels import CLIApprovalChannel, CallbackApprovalChannel
 from shani.schemas.decision import DecisionProposal, EvidenceItem
 
-_POLICY_PATH = Path(__file__).parent.parent.parent / "policy" / "decision_policy.yaml"
+_POLICY_PATH = Path(__file__).parent / "policy.yaml"
 _AGENT_ID = "vuln-remediation-agent/v1"
 
 # ---------------------------------------------------------------------------
