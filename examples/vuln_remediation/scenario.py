@@ -159,13 +159,15 @@ def _cvss_to_severity(score: float | None) -> str:
 # 2. Remediation proposal builder
 # ---------------------------------------------------------------------------
 
+# Severity → BlastRadius mapping.
+# Package upgrades modify the filesystem and affect runtime behavior.
+# Even MEDIUM findings warrant LIMITED blast radius (requires HITL at D-SAL >= 2).
 _SEVERITY_BLAST: dict[str, BlastRadius] = {
-    "CRITICAL": BlastRadius.SIGNIFICANT,
-    "HIGH":     BlastRadius.LIMITED,
-    "MEDIUM":   BlastRadius.ISOLATED,
-    "LOW":      BlastRadius.ISOLATED,
+    "CRITICAL": BlastRadius.CRITICAL,    # D-SAL 3-4, always requires HITL
+    "HIGH":     BlastRadius.SIGNIFICANT, # D-SAL 2-3, requires HITL
+    "MEDIUM":   BlastRadius.LIMITED,     # D-SAL 2, requires HITL
+    "LOW":      BlastRadius.ISOLATED,    # D-SAL 1, auto-approved
 }
-
 
 def make_proposal(f: VulnFinding) -> DecisionProposal:
     return DecisionProposal(
