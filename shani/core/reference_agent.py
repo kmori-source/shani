@@ -45,6 +45,7 @@ class ReferenceExecutionAgent:
 
         Then simulates execution (replace stub with real logic).
         """
+
         # Boundary enforces all ADO checks
         @self._boundary.enforce
         def _execute(ado: AuthorizedDecisionObject, dry_run: bool) -> dict:

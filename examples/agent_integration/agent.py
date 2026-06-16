@@ -52,23 +52,30 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    _shim.BaseModel = _mod.BaseModel; _shim.Field = _mod.Field
+    _shim.BaseModel = _mod.BaseModel
+    _shim.Field = _mod.Field
     _shim.field_validator = _mod.field_validator
     _shim.model_validator = _mod.model_validator
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning, module="shani")
 
 from datetime import datetime, timedelta, timezone
 
 from shani import (
-    ShaniEvaluator, StaticAuthorityProvider,
-    DecisionType, BlastRadius,
+    ShaniEvaluator,
+    StaticAuthorityProvider,
+    DecisionType,
+    BlastRadius,
 )
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.hitl import HITLGate
@@ -80,12 +87,15 @@ from shani.schemas.decision import DecisionScope, EvidenceItem
 # Step 1: Define existing tools (your code; has no knowledge of Shani)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class Tool:
     """Minimal Tool interface matching LangChain BaseTool shape."""
+
     def __init__(self, name: str, description: str, fn):
         self.name = name
         self.description = description
         self._fn = fn
+
     def run(self, inp: str) -> str:
         return self._fn(inp)
 
@@ -112,6 +122,7 @@ def _write_file(inp: str) -> str:
 def _run_command(cmd: str) -> str:
     """Execute a shell command."""
     import subprocess
+
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
         return result.stdout or result.stderr
@@ -126,16 +137,17 @@ def _call_api(url: str) -> str:
 
 # Four raw tools (no knowledge of Shani)
 raw_tools = [
-    Tool("read_file",    "Read file contents",          _read_file),
-    Tool("write_file",   "Write to a file",             _write_file),
-    Tool("run_command",  "Execute a shell command",     _run_command),
-    Tool("call_api",     "Call an external API",        _call_api),
+    Tool("read_file", "Read file contents", _read_file),
+    Tool("write_file", "Write to a file", _write_file),
+    Tool("run_command", "Execute a shell command", _run_command),
+    Tool("call_api", "Call an external API", _call_api),
 ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 2: Set up Shani (infrastructure config; agent code unchanged)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_shani(channel) -> HITLGate:
     """Build the Shani evaluator + HITL gate."""
@@ -145,12 +157,14 @@ def build_shani(channel) -> HITLGate:
         "my-agent/v1": AgentIdentity(
             agent_id="my-agent/v1",
             granted_dsal=2,
-            allowed_decision_types=frozenset([
-                "remediation",
-                "configuration_change",
-                "data_access",
-                "network_action",
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    "remediation",
+                    "configuration_change",
+                    "data_access",
+                    "network_action",
+                ]
+            ),
         )
     }
 
@@ -162,7 +176,7 @@ def build_shani(channel) -> HITLGate:
     return HITLGate(
         evaluator=evaluator,
         channel=channel,
-        approval_required_at_dsal=2,   # D-SAL 2+ requires human approval
+        approval_required_at_dsal=2,  # D-SAL 2+ requires human approval
         timeout_minutes=5,
     )
 
@@ -206,14 +220,16 @@ def wrap_tools(gate: HITLGate) -> list:
                 confidence=0.80,
             )
         ]
-        governed.append(ShaniLangChainTool(
-            tool=tool,
-            gate=gate,
-            proposed_by="my-agent/v1",
-            target_extractor=lambda inp, n=tool.name: f"{n}:{inp[:40]}",
-            evidence_extractor=evidence_ext,
-            **p,
-        ))
+        governed.append(
+            ShaniLangChainTool(
+                tool=tool,
+                gate=gate,
+                proposed_by="my-agent/v1",
+                target_extractor=lambda inp, n=tool.name: f"{n}:{inp[:40]}",
+                evidence_extractor=evidence_ext,
+                **p,
+            )
+        )
 
     return governed
 
@@ -222,6 +238,7 @@ def wrap_tools(gate: HITLGate) -> list:
 # Step 3: Agent loop (the LLM part)
 # For a real LLM, just replace llm_call()
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def llm_call(task: str, tool_results: list[dict]) -> dict:
     """
@@ -277,17 +294,17 @@ def llm_call(task: str, tool_results: list[dict]) -> dict:
     # Mock: returns a scenario of sequential tool calls based on the task
     steps = {
         "read": [
-            {"tool": "read_file",   "input": "/etc/hostname"},
-            {"tool": "call_api",    "input": "https://api.example.com/status"},
+            {"tool": "read_file", "input": "/etc/hostname"},
+            {"tool": "call_api", "input": "https://api.example.com/status"},
             {"done": True, "answer": "File and API check complete."},
         ],
         "write": [
-            {"tool": "read_file",   "input": "/tmp/config.txt"},
-            {"tool": "write_file",  "input": "/tmp/config.txt:updated=true"},
+            {"tool": "read_file", "input": "/tmp/config.txt"},
+            {"tool": "write_file", "input": "/tmp/config.txt:updated=true"},
             {"done": True, "answer": "Configuration file updated."},
         ],
         "command": [
-            {"tool": "read_file",   "input": "/tmp/log.txt"},
+            {"tool": "read_file", "input": "/tmp/log.txt"},
             {"tool": "run_command", "input": "echo 'task done' >> /tmp/log.txt"},
             {"done": True, "answer": "Command executed."},
         ],
@@ -354,8 +371,10 @@ def run_agent(task: str, governed_tools: list) -> str:
 # Step 4: Run
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def auto_responder(channel: CallbackApprovalChannel, action: str, delay: float = 0.2):
     """Thread that auto-approves or auto-denies in the background."""
+
     def loop():
         seen = set()
         for _ in range(60):
@@ -370,6 +389,7 @@ def auto_responder(channel: CallbackApprovalChannel, action: str, delay: float =
                 else:
                     channel.deny(req.request_id, "auto-operator", "auto-denied")
                     print(f"\n  [HITL] ✗ Denied: {req.decision_type} on {req.target}")
+
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t
@@ -377,9 +397,9 @@ def auto_responder(channel: CallbackApprovalChannel, action: str, delay: float =
 
 def main():
     parser = argparse.ArgumentParser(description="AI Agent + Shani integration example")
-    parser.add_argument("--auto",   action="store_true", help="auto-approve mode")
-    parser.add_argument("--deny",   action="store_true", help="auto-deny mode")
-    parser.add_argument("--cli",    action="store_true", help="interactive CLI mode")
+    parser.add_argument("--auto", action="store_true", help="auto-approve mode")
+    parser.add_argument("--deny", action="store_true", help="auto-deny mode")
+    parser.add_argument("--cli", action="store_true", help="interactive CLI mode")
     args = parser.parse_args()
 
     print("=" * 55)
@@ -403,7 +423,11 @@ def main():
 
     print(f"  Wrapped tools ({len(governed_tools)}):")
     for t in governed_tools:
-        dsal = "D-SAL 1 (auto)" if "DATA_ACCESS" in t.description or "NETWORK" in t.description else "D-SAL 2 (HITL required)"
+        dsal = (
+            "D-SAL 1 (auto)"
+            if "DATA_ACCESS" in t.description or "NETWORK" in t.description
+            else "D-SAL 2 (HITL required)"
+        )
         # get dsal from policy
         print(f"    • {t.name:<14} blast={t._blast_radius.value}")
 

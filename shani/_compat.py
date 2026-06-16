@@ -10,6 +10,7 @@ Install pydantic for production use:
 This shim is intentionally minimal — it skips type coercion and
 ge/le range validation. Use only for development/testing.
 """
+
 from __future__ import annotations
 
 import copy
@@ -41,6 +42,7 @@ def field_validator(*fields, **kwargs):
         fn._is_field_validator = True
         fn._validator_fields = fields
         return classmethod(fn)
+
     return decorator
 
 
@@ -49,6 +51,7 @@ def model_validator(*, mode="after"):
         fn._is_model_validator = True
         fn._validator_mode = mode
         return fn
+
     return decorator
 
 
@@ -71,7 +74,9 @@ class ModelMetaclass(type):
                 val = namespace[fname]
                 if isinstance(val, _FieldInfo):
                     fields[fname] = val
-                elif not callable(val) and not isinstance(val, (classmethod, staticmethod, property)):
+                elif not callable(val) and not isinstance(
+                    val, (classmethod, staticmethod, property)
+                ):
                     fields[fname] = _FieldInfo(default=val)
             elif fname not in fields:
                 fields[fname] = _FieldInfo()  # required
@@ -177,6 +182,7 @@ def _coerce_model_data(cls: type, data: dict) -> dict:
     """Pre-process data dict: coerce nested dicts/lists to appropriate types."""
     try:
         import typing
+
         hints = typing.get_type_hints(cls)
     except Exception:
         # get_type_hints fails when the shim module (_compat) is not in sys.modules,
@@ -186,17 +192,18 @@ def _coerce_model_data(cls: type, data: dict) -> dict:
         # shani modules). Private/ClassVar fields are skipped — they're never in `data`.
         import sys as _sys
         import builtins as _builtins
+
         hints = {}
         for klass in cls.__mro__:
-            ann = getattr(klass, '__annotations__', {})
+            ann = getattr(klass, "__annotations__", {})
             if not ann:
                 continue
-            mod_name = getattr(klass, '__module__', None)
+            mod_name = getattr(klass, "__module__", None)
             mod = _sys.modules.get(mod_name) if mod_name else None
             globalns = mod.__dict__ if mod is not None else {}
-            _local = {**globalns, '__builtins__': vars(_builtins)}
+            _local = {**globalns, "__builtins__": vars(_builtins)}
             for k, v in ann.items():
-                if k.startswith('_') or k in hints:
+                if k.startswith("_") or k in hints:
                     continue
                 if isinstance(v, str):
                     try:
@@ -217,8 +224,9 @@ def _coerce_model_data(cls: type, data: dict) -> dict:
 def _coerce_field_value(hint: Any, v: Any) -> Any:
     """Coerce value v to match hint type when deserializing (shim only)."""
     import enum as _enum
-    origin = getattr(hint, '__origin__', None)
-    args = getattr(hint, '__args__', None) or ()
+
+    origin = getattr(hint, "__origin__", None)
+    args = getattr(hint, "__args__", None) or ()
 
     # list[T] — coerce each element
     if origin is list and args and isinstance(v, list):
@@ -236,6 +244,7 @@ def _coerce_field_value(hint: Any, v: Any) -> Any:
         is_union = False
         try:
             import typing
+
             if origin is typing.Union:
                 is_union = True
         except Exception:
@@ -243,6 +252,7 @@ def _coerce_field_value(hint: Any, v: Any) -> Any:
         if not is_union:
             try:
                 import types as _types
+
                 if isinstance(hint, _types.UnionType):
                     is_union = True
             except AttributeError:
@@ -264,6 +274,7 @@ def _coerce_field_value(hint: Any, v: Any) -> Any:
     # datetime — coerce ISO string to datetime (needed when model_validate is called
     # on JSON-serialized data where datetimes have been converted to ISO strings)
     import datetime as _dt
+
     if isinstance(hint, type) and issubclass(hint, _dt.datetime) and isinstance(v, str):
         try:
             return _dt.datetime.fromisoformat(v)
@@ -276,6 +287,7 @@ def _coerce_field_value(hint: Any, v: Any) -> Any:
 def _serialize_value(val: Any, mode: str) -> Any:
     import datetime
     import enum
+
     if isinstance(val, BaseModel):
         return val.model_dump(mode=mode)
     if isinstance(val, list):

@@ -11,6 +11,7 @@ Test cases:
     4. malformed_constraint_string    — constraint without ':' separator → AMBIGUOUS
     5. partial_constraints_missing    — cross-org ADO with only some keys → still enforced
 """
+
 from __future__ import annotations
 
 import os
@@ -40,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, DecisionType, BlastRadius
@@ -144,6 +146,7 @@ def test_none_origin_org_no_cross_org_check(suite: ConformanceSuite) -> None:
 
     # Parent ADO with NO origin_org (intra-org delegation) — even with empty constraints
     from fixtures import make_fake_cross_org_ado as _fake_ado
+
     intra_parent = _fake_ado(
         origin_org="org-external",
         propagated_constraints=[
@@ -205,7 +208,7 @@ def test_unknown_constraint_vocabulary(suite: ConformanceSuite) -> None:
         origin_org="org-alpha",
         propagated_constraints=[
             "target_scope:host:dev-.*",
-            "unknown_key:some-value",       # unrecognised vocabulary
+            "unknown_key:some-value",  # unrecognised vocabulary
             "max_blast_radius:limited",
         ],
     )
@@ -267,7 +270,7 @@ def test_malformed_constraint_string(suite: ConformanceSuite) -> None:
         origin_org="org-alpha",
         propagated_constraints=[
             "target_scope:host:dev-.*",
-            "MALFORMED_NO_SEPARATOR",      # missing ':' — unrecognised key
+            "MALFORMED_NO_SEPARATOR",  # missing ':' — unrecognised key
             "max_blast_radius:limited",
         ],
     )

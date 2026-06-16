@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Shani Governance",
   "version": "0.2.0",
-  "description": "AI エージェントのブラウザ操作を Shani ガバナンスで制御し、HITL 承認 UI を提供する",
+  "description": "Controls AI agent browser actions via Shani governance and provides a HITL approval UI",
   "permissions": [
     "tabs",
     "activeTab",

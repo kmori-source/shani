@@ -45,6 +45,7 @@ try:
         PrivateFormat,
         NoEncryption,
     )
+
     _CRYPTO_AVAILABLE = True
 except ImportError:
     _CRYPTO_AVAILABLE = False
@@ -63,9 +64,10 @@ class SigningKeypair:
     In production, private keys must be stored in a secrets manager.
     Never serialize a private key to a Decision Object or log.
     """
+
     principal_id: str
     private_key_bytes: bytes  # 32-byte raw Ed25519 private key seed
-    public_key_bytes: bytes   # 32-byte raw Ed25519 public key
+    public_key_bytes: bytes  # 32-byte raw Ed25519 public key
 
     @classmethod
     def generate(cls, principal_id: str) -> "SigningKeypair":
@@ -110,11 +112,12 @@ class ADOSignature:
       - All previous signatures in the chain (chained binding)
       - The signer's principal_id and timestamp
     """
+
     principal_id: str
-    role: str              # "authority" | "boundary" | "agent" | "delegate"
-    signature_b64: str     # base64-encoded Ed25519 signature (64 bytes)
-    signed_at: str         # ISO 8601 UTC timestamp
-    public_key_b64: str    # base64-encoded public key (32 bytes) for offline verification
+    role: str  # "authority" | "boundary" | "agent" | "delegate"
+    signature_b64: str  # base64-encoded Ed25519 signature (64 bytes)
+    signed_at: str  # ISO 8601 UTC timestamp
+    public_key_b64: str  # base64-encoded public key (32 bytes) for offline verification
 
 
 @dataclass
@@ -125,6 +128,7 @@ class ADOSignatureChain:
     Verification must proceed in order: authority → boundary → agent.
     Any gap or reordering invalidates the chain.
     """
+
     signatures: list[ADOSignature] = field(default_factory=list)
 
     def append(self, sig: ADOSignature) -> None:
@@ -149,7 +153,7 @@ class ADOSignatureChain:
         Canonical hash of the entire chain.
         This is what agents store and verify as the ADO binding_hash.
         """
-        chain_json = json.dumps(self.as_dict(), sort_keys=True, separators=(',', ':'))
+        chain_json = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(chain_json.encode()).hexdigest()
 
 
@@ -220,10 +224,10 @@ class ADOSigner:
         it, and an attacker can rewrite that field without detection.
         """
         combined = {
-            "payload":     payload,
+            "payload": payload,
             "prior_chain": chain.as_dict(),
         }
-        return json.dumps(combined, sort_keys=True, separators=(',', ':')).encode()
+        return json.dumps(combined, sort_keys=True, separators=(",", ":")).encode()
 
     def _sign_raw(self, data: bytes) -> bytes:
         if _CRYPTO_AVAILABLE:
@@ -233,6 +237,7 @@ class ADOSigner:
             # Offline fallback: HMAC-SHA256 (for testing without cryptography package)
             import hmac as _hmac
             import hashlib as _hashlib
+
             return _hmac.new(self._keypair.private_key_bytes, data, _hashlib.sha256).digest()
 
 
@@ -296,12 +301,14 @@ class ADOChainVerifier:
         """Raises if verification fails."""
         if _CRYPTO_AVAILABLE:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
             pub = Ed25519PublicKey.from_public_bytes(public_key_bytes)
             pub.verify(signature, data)  # raises InvalidSignature on failure
         else:
             # Offline fallback: HMAC verify
             import hmac as _hmac
             import hashlib as _hashlib
+
             expected = _hmac.new(public_key_bytes, data, _hashlib.sha256).digest()
             if not _hmac.compare_digest(expected, signature):
                 raise ValueError("HMAC verification failed (offline mode)")

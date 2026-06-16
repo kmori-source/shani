@@ -8,6 +8,7 @@ Verifies all invariants of the v5 schema without pydantic:
   - signature field (renamed from binding_hash)
   - delegation_permitted property
 """
+
 from __future__ import annotations
 import hashlib, json, os, sys, uuid
 from datetime import datetime, timedelta, timezone
@@ -18,14 +19,30 @@ PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures = []
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f": {d}" if d else ""))
-def section(t): print(f"\n{'─'*58}\n  {t}\n{'─'*58}")
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f": {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n{'─' * 58}\n  {t}\n{'─' * 58}")
+
 
 # ── helpers ──────────────────────────────────────────────────────────
 
-def now(): return datetime.now(tz=timezone.utc)
-def future(s=300): return now() + timedelta(seconds=s)
+
+def now():
+    return datetime.now(tz=timezone.utc)
+
+
+def future(s=300):
+    return now() + timedelta(seconds=s)
+
 
 def make_delegation_rules(allowed=None, max_child=0, max_depth=0, max_children=0):
     return {
@@ -35,6 +52,7 @@ def make_delegation_rules(allowed=None, max_child=0, max_depth=0, max_children=0
         "max_children": max_children,
     }
 
+
 def delegation_permitted(rules: dict) -> bool:
     return (
         bool(rules["allowed_sub_decisions"])
@@ -43,33 +61,36 @@ def delegation_permitted(rules: dict) -> bool:
         and rules["max_children"] > 0
     )
 
+
 # ── Tests ─────────────────────────────────────────────────────────────
+
 
 def test_field_names():
     section("v5 field naming: issued_at / expires_at / signature")
 
     # Simulate ADO construction
     ado = {
-        "decision_id":   str(uuid.uuid4()),
+        "decision_id": str(uuid.uuid4()),
         "proposal_hash": "abc123",
-        "signature":     "sig456",      # was: binding_hash
-        "authority":     "SecOps-Lead",
+        "signature": "sig456",  # was: binding_hash
+        "authority": "SecOps-Lead",
         "authorized_dsal": 2,
         "delegation_rules": make_delegation_rules(),
-        "nonce":         os.urandom(32).hex(),
-        "issued_at":     now().isoformat(),       # was: authorized_at
-        "expires_at":    future(300).isoformat(), # was: valid_until
+        "nonce": os.urandom(32).hex(),
+        "issued_at": now().isoformat(),  # was: authorized_at
+        "expires_at": future(300).isoformat(),  # was: valid_until
     }
 
-    assert "issued_at" in ado,    "issued_at must exist"
-    assert "expires_at" in ado,   "expires_at must exist"
-    assert "signature" in ado,    "signature must exist"
+    assert "issued_at" in ado, "issued_at must exist"
+    assert "expires_at" in ado, "expires_at must exist"
+    assert "signature" in ado, "signature must exist"
     assert "authorized_at" not in ado, "authorized_at must be gone"
-    assert "valid_until" not in ado,   "valid_until must be gone"
-    assert "binding_hash" not in ado,  "binding_hash must be gone"
+    assert "valid_until" not in ado, "valid_until must be gone"
+    assert "binding_hash" not in ado, "binding_hash must be gone"
     ok("issued_at (was: authorized_at)")
     ok("expires_at (was: valid_until)")
     ok("signature (was: binding_hash)")
+
 
 def test_temporal_invariants():
     section("Temporal invariants: expires_at > issued_at")
@@ -104,6 +125,7 @@ def test_temporal_invariants():
     remaining = time_remaining(future(300).isoformat())
     assert 295 < remaining <= 300, f"Expected ~300s, got {remaining}"
     ok(f"time_remaining_seconds() ≈ {remaining:.0f}s")
+
 
 def test_max_children():
     section("max_children: fan-out attack prevention")
@@ -152,59 +174,80 @@ def test_max_children():
     assert not delegation_permitted(r)
     ok("Depth exhausted after 3 hops: delegation_permitted=False")
 
+
 def test_exec_context():
     section("ExecContext: execution metadata grouped separately")
 
     # ExecContext groups what-is-authorized fields
     exec_ctx = {
-        "decision_type":       "network_action",
+        "decision_type": "network_action",
         "intent_binding": {
-            "intent":          "network_action:Isolate host",
-            "target":          "host:prod-db-12",
-            "scope_summary":   "assets:prod-db-12|max:1",
+            "intent": "network_action:Isolate host",
+            "target": "host:prod-db-12",
+            "scope_summary": "assets:prod-db-12|max:1",
             "expected_effect": "Host network-isolated",
-            "reversibility":   True,
+            "reversibility": True,
         },
-        "parent_decision_id":  None,
-        "constraints":         {"require_confirmation": True},
-        "rollback_policy":     None,
+        "parent_decision_id": None,
+        "constraints": {"require_confirmation": True},
+        "rollback_policy": None,
     }
 
     # Top-level ADO fields are only the security-critical ones
     ado_top_level_fields = {
-        "decision_id", "proposal_hash", "signature",
-        "authority", "authorized_dsal",
+        "decision_id",
+        "proposal_hash",
+        "signature",
+        "authority",
+        "authorized_dsal",
         "delegation_rules",
         "nonce",
-        "issued_at", "expires_at",
+        "issued_at",
+        "expires_at",
         "exec_context",
     }
 
     # Execution metadata fields NOT at top level
-    exec_fields = {"decision_type", "intent_binding", "constraints",
-                   "rollback_policy", "parent_decision_id"}
+    exec_fields = {
+        "decision_type",
+        "intent_binding",
+        "constraints",
+        "rollback_policy",
+        "parent_decision_id",
+    }
 
     # None of the exec fields leak to top level
     for f in exec_fields:
         assert f not in ado_top_level_fields, f"{f} should be in exec_context, not top-level"
     ok("decision_type, intent_binding, constraints, rollback_policy → exec_context")
-    ok("Top-level ADO contains only: identity, integrity, authorization, delegation, replay, temporal")
+    ok(
+        "Top-level ADO contains only: identity, integrity, authorization, delegation, replay, temporal"
+    )
 
     # But they're accessible via properties (backwards compat)
     # Simulated
     class FakeADO:
         exec_context = type("EC", (), exec_ctx)()
+
         @property
-        def decision_type(self): return self.exec_context.decision_type
+        def decision_type(self):
+            return self.exec_context.decision_type
+
         @property
-        def intent_binding(self): return self.exec_context.intent_binding
+        def intent_binding(self):
+            return self.exec_context.intent_binding
+
         @property
-        def constraints(self): return self.exec_context.constraints
+        def constraints(self):
+            return self.exec_context.constraints
 
     ado = FakeADO()
     assert ado.decision_type == "network_action"
     assert ado.intent_binding["target"] == "host:prod-db-12"
-    ok("Properties provide backwards-compatible access: ado.decision_type, ado.intent_binding, ado.constraints")
+    ok(
+        "Properties provide backwards-compatible access: ado.decision_type, ado.intent_binding, ado.constraints"
+    )
+
 
 def test_full_structure():
     section("Full ADO v5 structure self-consistency")
@@ -214,41 +257,39 @@ def test_full_structure():
     expires = issued + timedelta(minutes=5)
 
     proposal_data = {
-        "decision_id":    "dec-001",
-        "decision_type":  "remediation",
-        "proposed_by":    "soc-agent/v1",
-        "description":    "Isolate host",
-        "target":         "host:prod-db-12",
+        "decision_id": "dec-001",
+        "decision_type": "remediation",
+        "proposed_by": "soc-agent/v1",
+        "description": "Isolate host",
+        "target": "host:prod-db-12",
         "requested_dsal": 2,
-        "reversibility":  True,
-        "blast_radius":   "significant",
-        "expires_at":     None,
+        "reversibility": True,
+        "blast_radius": "significant",
+        "expires_at": None,
     }
-    proposal_hash = hashlib.sha256(
-        json.dumps(proposal_data, sort_keys=True).encode()
-    ).hexdigest()
+    proposal_hash = hashlib.sha256(json.dumps(proposal_data, sort_keys=True).encode()).hexdigest()
 
     delegation_rules = make_delegation_rules()  # leaf node, no delegation
 
     # Canonical signed payload (must include all security-critical fields)
     payload = {
-        "decision_id":     "dec-001",
-        "authority":       "SecOps-Lead",
+        "decision_id": "dec-001",
+        "authority": "SecOps-Lead",
         "authorized_dsal": 2,
-        "issued_at":       issued.isoformat(),
-        "expires_at":      expires.isoformat(),
-        "proposal_hash":   proposal_hash,
-        "nonce":           nonce,
+        "issued_at": issued.isoformat(),
+        "expires_at": expires.isoformat(),
+        "proposal_hash": proposal_hash,
+        "nonce": nonce,
         "delegation_rules": {
             "allowed_sub_decisions": sorted(delegation_rules["allowed_sub_decisions"]),
-            "max_child_dsal":        delegation_rules["max_child_dsal"],
-            "max_depth":             delegation_rules["max_depth"],
-            "max_children":         delegation_rules["max_children"],  # ← NEW
+            "max_child_dsal": delegation_rules["max_child_dsal"],
+            "max_depth": delegation_rules["max_depth"],
+            "max_children": delegation_rules["max_children"],  # ← NEW
         },
         "exec_context": {
             "decision_type": "remediation",
-            "intent":        "remediation:Isolate host",
-            "target":        "host:prod-db-12",
+            "intent": "remediation:Isolate host",
+            "target": "host:prod-db-12",
         },
     }
 
@@ -256,28 +297,32 @@ def test_full_structure():
     signature = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     ado = {
-        "decision_id":     "dec-001",
-        "proposal_hash":   proposal_hash,
-        "signature":       signature,
-        "authority":       "SecOps-Lead",
+        "decision_id": "dec-001",
+        "proposal_hash": proposal_hash,
+        "signature": signature,
+        "authority": "SecOps-Lead",
         "authorized_dsal": 2,
         "delegation_rules": delegation_rules,
-        "nonce":           nonce,
-        "issued_at":       issued.isoformat(),
-        "expires_at":      expires.isoformat(),
+        "nonce": nonce,
+        "issued_at": issued.isoformat(),
+        "expires_at": expires.isoformat(),
         "exec_context": {
-            "decision_type":  "remediation",
+            "decision_type": "remediation",
             "intent_binding": {"target": "host:prod-db-12"},
         },
     }
 
     # Verify all 10 top-level fields present
     expected_fields = {
-        "decision_id", "proposal_hash", "signature",
-        "authority", "authorized_dsal",
+        "decision_id",
+        "proposal_hash",
+        "signature",
+        "authority",
+        "authorized_dsal",
         "delegation_rules",
         "nonce",
-        "issued_at", "expires_at",
+        "issued_at",
+        "expires_at",
         "exec_context",
     }
     assert set(ado.keys()) == expected_fields, f"Missing: {expected_fields - set(ado.keys())}"
@@ -286,7 +331,9 @@ def test_full_structure():
     # Verify delegation_rules has all 4 fields
     dr_fields = {"allowed_sub_decisions", "max_child_dsal", "max_depth", "max_children"}
     assert set(delegation_rules.keys()) == dr_fields
-    ok("DelegationRules has all 4 fields: allowed_sub_decisions, max_child_dsal, max_depth, max_children")
+    ok(
+        "DelegationRules has all 4 fields: allowed_sub_decisions, max_child_dsal, max_depth, max_children"
+    )
 
     # Verify nonce is 64-char hex (32 bytes)
     assert len(ado["nonce"]) == 64
@@ -310,7 +357,8 @@ if __name__ == "__main__":
     print("\n" + "=" * 58)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
+        for f in _failures:
+            print(f"    • {f}")
         sys.exit(1)
     else:
         print("  All tests passed.")

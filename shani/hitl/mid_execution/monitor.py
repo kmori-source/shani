@@ -38,26 +38,27 @@ logger = logging.getLogger("shani.hitl.mid")
 
 
 class ExecutionStatus(str, Enum):
-    RUNNING   = "running"
-    PAUSED    = "paused"
-    RESUMED   = "resumed"
-    ABORTED   = "aborted"
+    RUNNING = "running"
+    PAUSED = "paused"
+    RESUMED = "resumed"
+    ABORTED = "aborted"
     COMPLETED = "completed"
 
 
 class InterventionType(str, Enum):
-    PAUSE    = "pause"
-    ABORT    = "abort"
+    PAUSE = "pause"
+    ABORT = "abort"
     OVERRIDE = "override"
-    RESUME   = "resume"
-    OBSERVE  = "observe"
+    RESUME = "resume"
+    OBSERVE = "observe"
 
 
 @dataclass
 class ExecutionSession:
     """Tracks a single running agent node."""
+
     session_id: str
-    decision_id: str          # The ADO this session runs under
+    decision_id: str  # The ADO this session runs under
     agent_id: str
     target: str
     started_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
@@ -81,11 +82,12 @@ class ExecutionSession:
 @dataclass
 class InterventionRequest:
     """A human's decision to intervene in a running execution."""
+
     intervention_type: InterventionType
     session_id: str
     authority: str
     reason: str
-    override_value: Any = None     # Only for OVERRIDE interventions
+    override_value: Any = None  # Only for OVERRIDE interventions
     requested_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
@@ -134,28 +136,33 @@ class MidExecutionMonitor:
             target=self._watchdog_loop, daemon=True, name="shani-mid-watchdog"
         )
         self._watchdog_thread.start()
-        logger.info("Mid-execution watchdog started (silence_threshold=%ss)", self._silence_threshold)
+        logger.info(
+            "Mid-execution watchdog started (silence_threshold=%ss)", self._silence_threshold
+        )
 
     def stop_watchdog(self) -> None:
         self._running = False
 
     def register(
         self,
-        ado: Any,      # AuthorizedDecisionObject
+        ado: Any,  # AuthorizedDecisionObject
         agent_id: str,
     ) -> str:
         """Register a new execution session. Returns session_id."""
         import uuid
+
         session_id = str(uuid.uuid4())[:8]
         session = ExecutionSession(
             session_id=session_id,
             decision_id=ado.decision_id,
             agent_id=agent_id,
-            target=ado.intent_binding.target if hasattr(ado, 'intent_binding') else "unknown",
+            target=ado.intent_binding.target if hasattr(ado, "intent_binding") else "unknown",
         )
         with self._lock:
             self._sessions[session_id] = session
-        logger.info("Session registered | id=%s agent=%s target=%s", session_id, agent_id, session.target)
+        logger.info(
+            "Session registered | id=%s agent=%s target=%s", session_id, agent_id, session.target
+        )
         return session_id
 
     def heartbeat(self, session_id: str, message: str = "") -> None:
@@ -184,7 +191,9 @@ class MidExecutionMonitor:
                 return
 
             if intervention.intervention_type == InterventionType.ABORT:
-                logger.warning("Execution ABORTED | session=%s reason=%s", session_id, intervention.reason)
+                logger.warning(
+                    "Execution ABORTED | session=%s reason=%s", session_id, intervention.reason
+                )
                 raise ExecutionAborted(
                     f"Aborted by {intervention.authority}: {intervention.reason}"
                 )
@@ -194,7 +203,7 @@ class MidExecutionMonitor:
                 with self._lock:
                     if session := self._sessions.get(session_id):
                         session.status = ExecutionStatus.PAUSED
-                time.sleep(0.5)   # Poll for resume
+                time.sleep(0.5)  # Poll for resume
                 continue
 
             if intervention.intervention_type == InterventionType.RESUME:
@@ -250,14 +259,17 @@ class MidExecutionMonitor:
             if session and session.intervention:
                 if session.intervention.intervention_type == InterventionType.OVERRIDE:
                     val = session.intervention.override_value
-                    session.intervention = None   # consume it
+                    session.intervention = None  # consume it
                     return val
         return None
 
     def get_active_sessions(self) -> list[ExecutionSession]:
         with self._lock:
-            return [s for s in self._sessions.values()
-                    if s.status in (ExecutionStatus.RUNNING, ExecutionStatus.PAUSED)]
+            return [
+                s
+                for s in self._sessions.values()
+                if s.status in (ExecutionStatus.RUNNING, ExecutionStatus.PAUSED)
+            ]
 
     def get_session(self, session_id: str) -> ExecutionSession | None:
         with self._lock:
@@ -267,7 +279,9 @@ class MidExecutionMonitor:
     # Internal
     # ------------------------------------------------------------------
 
-    def _intervene(self, session_id: str, itype: InterventionType, authority: str, reason: str) -> None:
+    def _intervene(
+        self, session_id: str, itype: InterventionType, authority: str, reason: str
+    ) -> None:
         req = InterventionRequest(
             intervention_type=itype,
             session_id=session_id,
@@ -279,7 +293,9 @@ class MidExecutionMonitor:
             if session is None:
                 raise KeyError(f"No active session: {session_id}")
             session.intervention = req
-        logger.warning("Intervention | type=%s session=%s by=%s", itype.value, session_id, authority)
+        logger.warning(
+            "Intervention | type=%s session=%s by=%s", itype.value, session_id, authority
+        )
         if self._on_intervention:
             self._on_intervention(req)
 
@@ -293,7 +309,8 @@ class MidExecutionMonitor:
                     if session.silence_seconds() > self._silence_threshold:
                         logger.warning(
                             "Silent agent detected | session=%s silence=%.0fs",
-                            session.session_id, session.silence_seconds(),
+                            session.session_id,
+                            session.silence_seconds(),
                         )
                         if self._on_silence:
                             self._on_silence(session)

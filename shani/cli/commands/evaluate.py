@@ -1,4 +1,5 @@
 """shani evaluate <proposal.json> — Evaluate a proposal and print the result."""
+
 from __future__ import annotations
 
 import argparse
@@ -28,8 +29,11 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     from datetime import datetime, timedelta, timezone
 
     from shani import (
-        ShaniEvaluator, StaticAuthorityProvider,
-        DecisionType, BlastRadius, DeniedDecision,
+        ShaniEvaluator,
+        StaticAuthorityProvider,
+        DecisionType,
+        BlastRadius,
+        DeniedDecision,
     )
     from shani.authority.policy import DecisionPolicyProvider
     from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
@@ -38,6 +42,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     policy: DecisionPolicyProvider
     if args.policy:
         from shani.authority.provider import YAMLAuthorityProvider
+
         authority = YAMLAuthorityProvider(config_path=args.policy)
         policy = DecisionPolicyProvider(allow_unregistered_agents=True)
     else:

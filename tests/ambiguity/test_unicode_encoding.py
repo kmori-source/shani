@@ -14,6 +14,7 @@ Covers:
 - canonical_hash includes Unicode content verbatim
 - Empty string fields rejected (min_length enforcement)
 """
+
 from __future__ import annotations
 
 import os
@@ -43,6 +44,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone

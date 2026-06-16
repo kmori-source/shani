@@ -1,19 +1,20 @@
 """
 examples/nanoclaw_sidecar/example.py
 
-Pattern 1: Pod内サイドカー — nanoclaw + Shani を同一 Pod 内で動かす例。
+Pattern 1: In-Pod Sidecar — example of running nanoclaw + Shani in the same Pod.
 
-このスクリプト自体はローカル動作確認用。
-実際の Pod 構成では server.serve_forever() と agent.run() は別コンテナで動作する。
+This script is for local operation verification.
+In an actual Pod configuration, server.serve_forever() and agent.run() run in separate containers.
 
 Usage:
     pip install shani
     python example.py
 
-環境変数:
-    SHANI_HOST  サイドカーのバインドアドレス（デフォルト: 0.0.0.0）
-    SHANI_PORT  ポート番号（デフォルト: 8765）
+Environment variables:
+    SHANI_HOST  Sidecar bind address (default: 0.0.0.0)
+    SHANI_PORT  Port number (default: 8765)
 """
+
 from __future__ import annotations
 
 import os
@@ -27,15 +28,19 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider
@@ -47,7 +52,7 @@ from shani.adapters.nanoclaw import patch_nanoclaw_agent
 from shani.adapters.nanoclaw.sidecar import ShaniSidecarServer, ShaniSidecarClient
 
 
-# ─── 1. Shani ゲートを構築（サイドカーコンテナ側） ────────────────────────────
+# ─── 1. Build Shani gate (sidecar container side) ────────────────────────────
 
 channel = CLIApprovalChannel()
 
@@ -58,9 +63,9 @@ evaluator = ShaniEvaluator(
             "nanoclaw-agent/v1": AgentIdentity(
                 agent_id="nanoclaw-agent/v1",
                 granted_dsal=2,
-                allowed_decision_types=frozenset([
-                    "agent_task", "data_access", "remediation", "configuration_change"
-                ]),
+                allowed_decision_types=frozenset(
+                    ["agent_task", "data_access", "remediation", "configuration_change"]
+                ),
             )
         }
     ),
@@ -74,7 +79,7 @@ gate = HITLGate(
 )
 
 
-# ─── 2. サイドカーサーバーを起動（バックグラウンド） ────────────────────────
+# ─── 2. Start sidecar server (background) ────────────────────────────────────
 
 port = int(os.environ.get("SHANI_PORT", "8765"))
 server = ShaniSidecarServer(gate=gate, host="127.0.0.1", port=port)
@@ -82,7 +87,7 @@ server.start()
 print(f"[sidecar] ShaniSidecarServer started on 127.0.0.1:{port}")
 
 
-# サーバーが起動するまで待つ
+# Wait for the server to start
 client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
 for _ in range(20):
     if client.healthz():
@@ -95,10 +100,12 @@ else:
 print(f"[sidecar] healthz: ok")
 
 
-# ─── 3. nanoclaw エージェントを定義（エージェントコンテナ側） ────────────────
+# ─── 3. Define nanoclaw agent (agent container side) ─────────────────────────
+
 
 class FakeNanoclawAgent:
-    """nanoclaw.Agent の簡易シミュレーター。"""
+    """Simple simulator for nanoclaw.Agent."""
+
     def __init__(self, name: str):
         self.name = name
         self.tools: dict = {}
@@ -112,16 +119,16 @@ class FakeNanoclawAgent:
 agent = FakeNanoclawAgent("ops-bot")
 
 agent.tools = {
-    "fetch_data":   lambda url: f"<data from {url}>",
+    "fetch_data": lambda url: f"<data from {url}>",
     "write_report": lambda path, content: f"written:{path}",
 }
 
 
-# ─── 4. クライアントを gate として渡すだけで HTTP サイドカー化 ────────────────
+# ─── 4. Pass the client as the gate to enable HTTP sidecar ───────────────────
 
 patch_nanoclaw_agent(
     agent=agent,
-    gate=client,   # ← ShaniSidecarClient を gate に渡す
+    gate=client,  # ← Pass ShaniSidecarClient as the gate
     proposed_by="nanoclaw-agent/v1",
     policy={
         "write_report": dict(
@@ -138,7 +145,7 @@ patch_nanoclaw_agent(
 print("[agent] nanoclaw agent patched (tool calls → HTTP sidecar)")
 
 
-# ─── 5. エージェントを実行 ───────────────────────────────────────────────────
+# ─── 5. Run the agent ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     result = agent.run("Fetch the API status")

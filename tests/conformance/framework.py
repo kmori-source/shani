@@ -14,6 +14,7 @@ Usage in a test module:
     suite.assert_must_fail("expired_ado", result, "ADO must be rejected when expired")
     suite.report.print_summary()
 """
+
 from __future__ import annotations
 
 import json
@@ -49,11 +50,11 @@ class ConformanceResult:
 
     def to_dict(self) -> dict:
         return {
-            "test_id":  self.test_id,
+            "test_id": self.test_id,
             "category": self.category.value,
-            "passed":   self.passed,
+            "passed": self.passed,
             "description": self.description,
-            "detail":   self.detail,
+            "detail": self.detail,
             "spec_ref": self.spec_ref,
         }
 

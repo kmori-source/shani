@@ -4,6 +4,7 @@ from .channels import (
     WebhookApprovalChannel,
     SlackApprovalChannel,
 )
+
 __all__ = [
     "CLIApprovalChannel",
     "CallbackApprovalChannel",

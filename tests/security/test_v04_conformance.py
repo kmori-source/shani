@@ -10,6 +10,7 @@ Verifies all normative requirements introduced in v0.4:
   4. Cross-org ADO tests (propagated_constraints)
   5. PostureSimulation tests
 """
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,7 @@ try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
     )
@@ -37,16 +39,26 @@ except ImportError:
 warnings.filterwarnings("ignore")
 
 from shani.schemas.decision import (
-    BlastRadius, DecisionProposal, DecisionScope, DecisionType, EvidenceItem,
+    BlastRadius,
+    DecisionProposal,
+    DecisionScope,
+    DecisionType,
+    EvidenceItem,
 )
 from shani.schemas.posture import (
-    PostureConstraints, PostureHistoryEntry, PostureOutcome,
-    PostureRefinementRequest, PostureSimulationResult, UserPosture,
+    PostureConstraints,
+    PostureHistoryEntry,
+    PostureOutcome,
+    PostureRefinementRequest,
+    PostureSimulationResult,
+    UserPosture,
 )
 from shani.posture.engine import PostureEngine
 from shani.posture.simulation import PostureSimulation
 from shani.authority.policy import (
-    DecisionPolicyProvider, OrgPolicy, OrgPolicyAbsoluteConstraints,
+    DecisionPolicyProvider,
+    OrgPolicy,
+    OrgPolicyAbsoluteConstraints,
 )
 
 PASS_MARK = "\033[92m✓\033[0m"
@@ -81,12 +93,12 @@ def future(seconds: int = 300) -> datetime:
 
 
 def make_posture(
-    target_scope: str          = "host:dev-.*",
-    max_blast_radius: str      = "limited",
+    target_scope: str = "host:dev-.*",
+    max_blast_radius: str = "limited",
     reversibility_required: bool = True,
-    minimum_evidence: int      = 1,
-    simulation_ref: str        = "sim-test-001",
-    principal_id: str          = "alice@example.com",
+    minimum_evidence: int = 1,
+    simulation_ref: str = "sim-test-001",
+    principal_id: str = "alice@example.com",
     posture_signature: str | None = "test-posture-signature",
 ) -> UserPosture:
     return UserPosture(
@@ -106,11 +118,11 @@ def make_posture(
 
 
 def make_proposal(
-    target:         str        = "host:dev-01",
-    blast_radius:   BlastRadius = BlastRadius.LIMITED,
-    reversibility:  bool       = True,
-    evidence_count: int        = 1,
-    decision_type:  DecisionType = DecisionType.REMEDIATION,
+    target: str = "host:dev-01",
+    blast_radius: BlastRadius = BlastRadius.LIMITED,
+    reversibility: bool = True,
+    evidence_count: int = 1,
+    decision_type: DecisionType = DecisionType.REMEDIATION,
 ) -> DecisionProposal:
     evidence = [
         EvidenceItem(source="monitor", content=f"alert-{i}", confidence=0.9)
@@ -238,9 +250,7 @@ def test_posture_engine_layer1():
         fail("target outside target_scope should be REJECT", f"got {outcome}")
 
     # Blast radius too high → REJECT
-    proposal_high_blast = make_proposal(
-        blast_radius=BlastRadius.CRITICAL, evidence_count=2
-    )
+    proposal_high_blast = make_proposal(blast_radius=BlastRadius.CRITICAL, evidence_count=2)
     outcome, req = engine.evaluate(proposal_high_blast)
     if outcome == PostureOutcome.REJECT:
         ok("blast_radius exceeds max_blast_radius → REJECT")
@@ -265,8 +275,10 @@ def test_posture_engine_layer1():
 
     # All constraints satisfied → PASS (must NOT receive REJECT from Layer 1)
     proposal_valid = make_proposal(
-        target="host:dev-42", blast_radius=BlastRadius.LIMITED,
-        reversibility=True, evidence_count=2,
+        target="host:dev-42",
+        blast_radius=BlastRadius.LIMITED,
+        reversibility=True,
+        evidence_count=2,
     )
     outcome, req = engine.evaluate(proposal_valid)
     if outcome == PostureOutcome.PASS:
@@ -371,7 +383,9 @@ def test_cross_org_propagated_constraints():
     section("Cross-org ADO — propagated_constraints (ADO v5.1)")
 
     from shani.schemas.decision import (
-        AuthorizedDecisionObject, DelegationRules, ExecContext,
+        AuthorizedDecisionObject,
+        DelegationRules,
+        ExecContext,
         IntentBinding,
     )
 
@@ -497,19 +511,39 @@ def test_posture_simulation():
 
     historical = [
         # PASS: matches all constraints
-        make_proposal(target="host:dev-01", blast_radius=BlastRadius.LIMITED,
-                      reversibility=True, evidence_count=1),
-        make_proposal(target="host:dev-02", blast_radius=BlastRadius.ISOLATED,
-                      reversibility=True, evidence_count=2),
+        make_proposal(
+            target="host:dev-01",
+            blast_radius=BlastRadius.LIMITED,
+            reversibility=True,
+            evidence_count=1,
+        ),
+        make_proposal(
+            target="host:dev-02",
+            blast_radius=BlastRadius.ISOLATED,
+            reversibility=True,
+            evidence_count=2,
+        ),
         # REJECT: target out of scope
-        make_proposal(target="host:prod-01", blast_radius=BlastRadius.LIMITED,
-                      reversibility=True, evidence_count=1),
+        make_proposal(
+            target="host:prod-01",
+            blast_radius=BlastRadius.LIMITED,
+            reversibility=True,
+            evidence_count=1,
+        ),
         # REJECT: blast_radius too high
-        make_proposal(target="host:dev-03", blast_radius=BlastRadius.CRITICAL,
-                      reversibility=True, evidence_count=1),
+        make_proposal(
+            target="host:dev-03",
+            blast_radius=BlastRadius.CRITICAL,
+            reversibility=True,
+            evidence_count=1,
+        ),
         # REJECT: irreversible
-        make_proposal(target="host:dev-04", blast_radius=BlastRadius.LIMITED,
-                      reversibility=False, evidence_count=1),
+        make_proposal(
+            target="host:dev-04",
+            blast_radius=BlastRadius.LIMITED,
+            reversibility=False,
+            evidence_count=1,
+        ),
     ]
 
     sim = PostureSimulation()
@@ -543,7 +577,7 @@ def test_posture_simulation():
 
     # Delta comparison: with a broader current posture
     current_posture = make_posture(
-        target_scope=".*",        # allows all targets
+        target_scope=".*",  # allows all targets
         max_blast_radius="critical",
         reversibility_required=False,
         minimum_evidence=0,

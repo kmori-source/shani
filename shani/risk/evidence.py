@@ -42,12 +42,14 @@ from ..schemas.decision import EvidenceItem
 # Source trust levels
 # ---------------------------------------------------------------------------
 
+
 class SourceTrust(str, Enum):
-    SYSTEM_SENSOR = "system_sensor"    # direct sensors, EDR, SIEM
-    VERIFIED_TOOL = "verified_tool"    # output of verified tools
-    AGENT_DERIVED = "agent_derived"    # interpretation by another agent
-    SELF_REPORTED = "self_reported"    # self-report by the proposing agent
-    UNKNOWN       = "unknown"          # unclassified
+    SYSTEM_SENSOR = "system_sensor"  # direct sensors, EDR, SIEM
+    VERIFIED_TOOL = "verified_tool"  # output of verified tools
+    AGENT_DERIVED = "agent_derived"  # interpretation by another agent
+    SELF_REPORTED = "self_reported"  # self-report by the proposing agent
+    UNKNOWN = "unknown"  # unclassified
+
 
 # source keyword → trust level mapping
 # IMPORTANT: longer / more-specific prefixes must appear BEFORE shorter ones
@@ -85,25 +87,29 @@ _TRUST_MULTIPLIER: dict[SourceTrust, float] = {
     SourceTrust.VERIFIED_TOOL: 0.85,
     SourceTrust.AGENT_DERIVED: 0.60,
     SourceTrust.SELF_REPORTED: 0.35,
-    SourceTrust.UNKNOWN:       0.50,
+    SourceTrust.UNKNOWN: 0.50,
 }
 
 # Evidence quality scoring constants — extracted for auditability and testability.
-_CONFLICT_CONFIDENCE_THRESHOLD = 0.4   # max confidence spread within a single source before flagging conflict
-_DIVERSITY_BONUS_PER_SOURCE    = 0.2   # quality bonus per unique evidence source (5 sources → max)
-_DIVERSITY_BONUS_CAP           = 1.0   # maximum diversity bonus before weighting
-_QUALITY_BASE_WEIGHT           = 0.7   # weight given to avg adjusted confidence in final score
-_QUALITY_DIVERSITY_WEIGHT      = 0.3   # weight given to diversity bonus in final score
-_LOW_CONFIDENCE_THRESHOLD      = 0.3   # avg adjusted confidence below this triggers very_low flag
-_SELF_REPORTED_QUALITY_PENALTY = 0.5   # multiplier applied when all evidence is self-reported
-_SIGNATURE_VALID_BONUS         = 0.15  # additive bonus applied to trust_multiplier when signature verifies
-_SIGNATURE_INVALID_MULTIPLIER  = 0.1   # trust_multiplier override when signature is present but invalid
+_CONFLICT_CONFIDENCE_THRESHOLD = (
+    0.4  # max confidence spread within a single source before flagging conflict
+)
+_DIVERSITY_BONUS_PER_SOURCE = 0.2  # quality bonus per unique evidence source (5 sources → max)
+_DIVERSITY_BONUS_CAP = 1.0  # maximum diversity bonus before weighting
+_QUALITY_BASE_WEIGHT = 0.7  # weight given to avg adjusted confidence in final score
+_QUALITY_DIVERSITY_WEIGHT = 0.3  # weight given to diversity bonus in final score
+_LOW_CONFIDENCE_THRESHOLD = 0.3  # avg adjusted confidence below this triggers very_low flag
+_SELF_REPORTED_QUALITY_PENALTY = 0.5  # multiplier applied when all evidence is self-reported
+_SIGNATURE_VALID_BONUS = 0.15  # additive bonus applied to trust_multiplier when signature verifies
+_SIGNATURE_INVALID_MULTIPLIER = (
+    0.1  # trust_multiplier override when signature is present but invalid
+)
 
 # Cross-validation constants
-_CROSS_VALIDATION_AGREEMENT_THRESHOLD = 0.3   # agreement above this → validator "agrees"
-_CROSS_VALIDATION_CONFLICT_THRESHOLD  = -0.3  # agreement below this → validator "conflicts"
-_CROSS_VALIDATION_AGREEMENT_BONUS     = 0.05  # quality bonus per agreeing validator call
-_CROSS_VALIDATION_CONFLICT_PENALTY    = 0.15  # quality penalty per conflicting validator call
+_CROSS_VALIDATION_AGREEMENT_THRESHOLD = 0.3  # agreement above this → validator "agrees"
+_CROSS_VALIDATION_CONFLICT_THRESHOLD = -0.3  # agreement below this → validator "conflicts"
+_CROSS_VALIDATION_AGREEMENT_BONUS = 0.05  # quality bonus per agreeing validator call
+_CROSS_VALIDATION_CONFLICT_PENALTY = 0.15  # quality penalty per conflicting validator call
 
 
 def classify_source(source: str) -> SourceTrust:
@@ -117,7 +123,7 @@ def classify_source(source: str) -> SourceTrust:
 def _canonical_evidence_bytes(source: str, content: str) -> bytes:
     """Deterministic bytes over which evidence signatures are computed."""
     data = {"content": content, "source": source}
-    return json.dumps(data, sort_keys=True, separators=(',', ':')).encode()
+    return json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
 
 
 def _verify_evidence_signature(item: EvidenceItem) -> bool | None:
@@ -141,12 +147,14 @@ def _verify_evidence_signature(item: EvidenceItem) -> bool | None:
 
         try:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
             pub = Ed25519PublicKey.from_public_bytes(pub_bytes)
             pub.verify(sig_bytes, data)  # raises InvalidSignature on failure
         except ImportError:
             # Offline fallback: HMAC-SHA256 (mirrors crypto/signing.py offline mode)
             import hashlib as _hashlib
             import hmac as _hmac
+
             expected = _hmac.new(pub_bytes, data, _hashlib.sha256).digest()
             if not _hmac.compare_digest(expected, sig_bytes):
                 raise ValueError("HMAC verification failed (offline mode)")
@@ -160,13 +168,15 @@ def _verify_evidence_signature(item: EvidenceItem) -> bool | None:
 # Cross-validation types
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class CrossValidationResult:
     """Result from one CrossValidator for one EvidenceItem."""
+
     validator_name: str
-    item_source:    str
-    agreement:      float  # -1.0 (strong disagreement) to 1.0 (strong agreement)
-    notes:          str
+    item_source: str
+    agreement: float  # -1.0 (strong disagreement) to 1.0 (strong agreement)
+    notes: str
 
 
 @runtime_checkable
@@ -202,14 +212,16 @@ class CrossValidator(Protocol):
 # Evidence evaluation result
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class EvidenceEvaluation:
     """Evaluation result for the evidence set."""
-    quality_score:            float          # 0.0 (poor) to 1.0 (good)
-    item_evaluations:         list[dict]     # per-item breakdown
-    conflicts:                list[str]      # conflicting evidence pairs
-    flags:                    dict[str, bool]
-    summary:                  str
+
+    quality_score: float  # 0.0 (poor) to 1.0 (good)
+    item_evaluations: list[dict]  # per-item breakdown
+    conflicts: list[str]  # conflicting evidence pairs
+    flags: dict[str, bool]
+    summary: str
     cross_validation_results: list[dict] = field(default_factory=list)  # per-validator results
 
     def explain(self) -> str:
@@ -237,6 +249,7 @@ class EvidenceEvaluation:
 # ---------------------------------------------------------------------------
 # EvidenceEvaluator
 # ---------------------------------------------------------------------------
+
 
 class EvidenceEvaluator:
     """
@@ -293,14 +306,16 @@ class EvidenceEvaluator:
 
             adjusted = raw_conf * multiplier
 
-            item_evals.append({
-                "source":              item.source,
-                "trust":               trust.value,
-                "raw_confidence":      raw_conf,
-                "trust_multiplier":    round(multiplier, 3),
-                "adjusted_confidence": round(adjusted, 3),
-                "signature_status":    sig_status,
-            })
+            item_evals.append(
+                {
+                    "source": item.source,
+                    "trust": trust.value,
+                    "raw_confidence": raw_conf,
+                    "trust_multiplier": round(multiplier, 3),
+                    "adjusted_confidence": round(adjusted, 3),
+                    "signature_status": sig_status,
+                }
+            )
             adjusted_confidences.append(adjusted)
 
             # record confidence per source (for conflict detection)
@@ -316,9 +331,7 @@ class EvidenceEvaluator:
             if len(confs) >= 2:
                 max_diff = max(confs) - min(confs)
                 if max_diff >= _CONFLICT_CONFIDENCE_THRESHOLD:
-                    conflicts.append(
-                        f"{src}: confidences {confs} differ by {max_diff:.2f}"
-                    )
+                    conflicts.append(f"{src}: confidences {confs} differ by {max_diff:.2f}")
 
         if conflicts:
             flags["conflicting_evidence"] = True
@@ -329,7 +342,9 @@ class EvidenceEvaluator:
 
         # quality_score: avg adjusted confidence × source diversity bonus
         diversity_bonus = min(_DIVERSITY_BONUS_CAP, unique_sources * _DIVERSITY_BONUS_PER_SOURCE)
-        quality_score = avg_adjusted * (_QUALITY_BASE_WEIGHT + diversity_bonus * _QUALITY_DIVERSITY_WEIGHT)
+        quality_score = avg_adjusted * (
+            _QUALITY_BASE_WEIGHT + diversity_bonus * _QUALITY_DIVERSITY_WEIGHT
+        )
 
         if avg_adjusted < _LOW_CONFIDENCE_THRESHOLD:
             flags["very_low_adjusted_confidence"] = True
@@ -338,8 +353,7 @@ class EvidenceEvaluator:
 
         # check if all evidence is self-reported
         all_self_reported = all(
-            classify_source(e.source) == SourceTrust.SELF_REPORTED
-            for e in evidence
+            classify_source(e.source) == SourceTrust.SELF_REPORTED for e in evidence
         )
         if all_self_reported:
             flags["all_self_reported"] = True
@@ -359,21 +373,27 @@ class EvidenceEvaluator:
                             agreement=0.0,
                             notes=f"validator error: {exc}",
                         )
-                    cv_results.append({
-                        "validator":  cv.validator_name,
-                        "source":     cv.item_source,
-                        "agreement":  cv.agreement,
-                        "notes":      cv.notes,
-                    })
+                    cv_results.append(
+                        {
+                            "validator": cv.validator_name,
+                            "source": cv.item_source,
+                            "agreement": cv.agreement,
+                            "notes": cv.notes,
+                        }
+                    )
 
             flags["cross_validated"] = True
 
-            agreeing   = sum(1 for r in cv_results if r["agreement"] >= _CROSS_VALIDATION_AGREEMENT_THRESHOLD)
-            conflicting = sum(1 for r in cv_results if r["agreement"] <= _CROSS_VALIDATION_CONFLICT_THRESHOLD)
+            agreeing = sum(
+                1 for r in cv_results if r["agreement"] >= _CROSS_VALIDATION_AGREEMENT_THRESHOLD
+            )
+            conflicting = sum(
+                1 for r in cv_results if r["agreement"] <= _CROSS_VALIDATION_CONFLICT_THRESHOLD
+            )
 
-            quality_score += agreeing   * _CROSS_VALIDATION_AGREEMENT_BONUS
+            quality_score += agreeing * _CROSS_VALIDATION_AGREEMENT_BONUS
             quality_score -= conflicting * _CROSS_VALIDATION_CONFLICT_PENALTY
-            quality_score  = max(0.0, min(1.0, quality_score))
+            quality_score = max(0.0, min(1.0, quality_score))
 
             if conflicting:
                 flags["cross_validation_conflict"] = True

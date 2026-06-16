@@ -1,21 +1,22 @@
 """
 tests/unit/test_cowork_adapter.py
 
-cowork (Claude API tool_use) アダプターのユニットテスト。
+Unit tests for the cowork (Claude API tool_use) adapter.
 
 Tests:
-  - read ツール → 即時承認
-  - write ツール → D-SAL=2, threshold=3 → 即時承認
-  - 拒否 → PermissionError が送出される
-  - process_response: tool_use ブロックを一括処理
-  - process_response: 未知ツール → skipped (deny_on_unknown=False)
-  - process_response: 未知ツール → エラー (deny_on_unknown=True)
-  - process_response: 拒否 → tool_result に is_error=True が返る
-  - wrap_tool_registry: ラップ済み callable が Shani を通過する
-  - tool_call が DEFAULT_DECISION_POLICY に存在する
-  - tool_call が CapabilityMatrix._FALLBACK に存在する
-  - tool_call が decision_policy.yaml に存在する
+  - read tool → immediate approval
+  - write tool → D-SAL=2, threshold=3 → immediate approval
+  - deny → PermissionError is raised
+  - process_response: batch process tool_use blocks
+  - process_response: unknown tool → skipped (deny_on_unknown=False)
+  - process_response: unknown tool → error (deny_on_unknown=True)
+  - process_response: deny → tool_result returns is_error=True
+  - wrap_tool_registry: wrapped callable passes through Shani
+  - tool_call exists in DEFAULT_DECISION_POLICY
+  - tool_call exists in CapabilityMatrix._FALLBACK
+  - tool_call exists in decision_policy.yaml
 """
+
 from __future__ import annotations
 
 import os
@@ -29,6 +30,7 @@ except ImportError:
     import types as _t
     import importlib.util as _iu
     import pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -41,6 +43,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider, DeniedDecision
@@ -60,9 +63,17 @@ FAIL = "\033[91m✗\033[0m"
 _failures: list[str] = []
 
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
 
 
 def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
@@ -71,13 +82,15 @@ def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
         "cowork-agent/v1": AgentIdentity(
             agent_id="cowork-agent/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                DecisionType.TOOL_CALL.value,
-                DecisionType.DATA_ACCESS.value,
-                DecisionType.CONFIGURATION_CHANGE.value,
-                DecisionType.AGENT_TASK.value,
-                DecisionType.REMEDIATION.value,
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    DecisionType.TOOL_CALL.value,
+                    DecisionType.DATA_ACCESS.value,
+                    DecisionType.CONFIGURATION_CHANGE.value,
+                    DecisionType.AGENT_TASK.value,
+                    DecisionType.REMEDIATION.value,
+                ]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -94,12 +107,12 @@ def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
 
 
 def make_tool_use_block(name: str, input_data: dict, tool_id: str = "tu_test"):
-    """anthropic ToolUseBlock を模倣する dict を返す。"""
+    """Returns a dict that mimics an anthropic ToolUseBlock."""
     return {"type": "tool_use", "id": tool_id, "name": name, "input": input_data}
 
 
 def test_read_tool_approved():
-    section("read ツール (DATA_ACCESS) → 即時承認")
+    section("read tool (DATA_ACCESS) → immediate approval")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1")
 
@@ -110,13 +123,13 @@ def test_read_tool_approved():
     )
 
     if "log contents" in str(result):
-        ok(f"read_file 即時承認: {result[:40]}")
+        ok(f"read_file immediate approval: {result[:40]}")
     else:
-        fail("read_file 失敗", str(result))
+        fail("read_file failed", str(result))
 
 
 def test_write_tool_approved():
-    section("write ツール (CONFIGURATION_CHANGE / D-SAL=2, threshold=3) → 即時承認")
+    section("write tool (CONFIGURATION_CHANGE / D-SAL=2, threshold=3) → immediate approval")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniCoworkAdapter(
         gate=gate,
@@ -136,13 +149,13 @@ def test_write_tool_approved():
     )
 
     if result == "written" and written:
-        ok(f"write_file 即時承認: path={written[0]}")
+        ok(f"write_file immediate approval: path={written[0]}")
     else:
-        fail("write_file 失敗", str(result))
+        fail("write_file failed", str(result))
 
 
 def test_denied_raises_permission_error():
-    section("拒否 → PermissionError")
+    section("deny → PermissionError")
     gate, _ = make_gate(hitl_dsal=1)
     adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1")
 
@@ -153,70 +166,78 @@ def test_denied_raises_permission_error():
             tool_fn=lambda inp: "executed",
             confidence=0.1,
         )
-        ok("bash 承認（evaluator 依存）")
+        ok("bash approved (evaluator dependent)")
     except PermissionError as e:
-        ok(f"bash 拒否 → PermissionError: {str(e)[:60]}")
+        ok(f"bash denied → PermissionError: {str(e)[:60]}")
     except Exception as e:
-        ok(f"bash 例外（許容）: {type(e).__name__}")
+        ok(f"bash exception (acceptable): {type(e).__name__}")
 
 
 def test_process_response_all_approved():
-    section("process_response: 全 tool_use 即時承認")
+    section("process_response: all tool_use immediate approval")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1")
 
-    # Claude レスポンスを模倣
-    fake_response = type("Response", (), {
-        "content": [
-            {"type": "text", "text": "I'll read the file and search."},
-            make_tool_use_block("read_file",  {"path": "/etc/hosts"}, "tu_1"),
-            make_tool_use_block("search",     {"query": "shani"},     "tu_2"),
-        ]
-    })()
+    # Simulate a Claude response
+    fake_response = type(
+        "Response",
+        (),
+        {
+            "content": [
+                {"type": "text", "text": "I'll read the file and search."},
+                make_tool_use_block("read_file", {"path": "/etc/hosts"}, "tu_1"),
+                make_tool_use_block("search", {"query": "shani"}, "tu_2"),
+            ]
+        },
+    )()
 
     tool_registry = {
         "read_file": lambda inp: f"contents:{inp['path']}",
-        "search":    lambda inp: f"results:{inp['query']}",
+        "search": lambda inp: f"results:{inp['query']}",
     }
 
     results = adapter.process_response(fake_response, tool_registry)
 
     if len(results) == 2:
-        ok(f"process_response: {len(results)} tool_results 返却")
+        ok(f"process_response: {len(results)} tool_results returned")
     else:
-        fail(f"process_response: {len(results)} tool_results（2 期待）", str(results))
+        fail(f"process_response: {len(results)} tool_results (expected 2)", str(results))
 
     for r in results:
         if r.get("type") == "tool_result" and not r.get("is_error"):
             ok(f"  tool_result id={r['tool_use_id']}: {r['content'][:30]}")
         else:
-            fail(f"  tool_result エラー", str(r))
+            fail(f"  tool_result error", str(r))
 
 
 def test_process_response_unknown_tool_skip():
-    section("process_response: 未知ツール → skip (deny_on_unknown=False)")
+    section("process_response: unknown tool → skip (deny_on_unknown=False)")
     gate, _ = make_gate(hitl_dsal=3)
-    adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1", deny_on_unknown_tool=False)
+    adapter = ShaniCoworkAdapter(
+        gate=gate, proposed_by="cowork-agent/v1", deny_on_unknown_tool=False
+    )
 
     fake_response = [
-        make_tool_use_block("known_tool",   {"x": 1}, "tu_1"),
+        make_tool_use_block("known_tool", {"x": 1}, "tu_1"),
         make_tool_use_block("unknown_tool", {"x": 2}, "tu_2"),
     ]
     tool_registry = {"known_tool": lambda inp: "ok"}
 
     results = adapter.process_response(fake_response, tool_registry)
 
-    # unknown_tool はスキップされるため tool_results は 1 件
+    # unknown_tool is skipped, so only 1 tool_result
     if len(results) == 1 and results[0]["tool_use_id"] == "tu_1":
-        ok("未知ツール skip: known_tool のみ tool_result 返却")
+        ok("unknown tool skip: only known_tool tool_result returned")
     else:
-        fail("未知ツール skip 失敗", str(results))
+        fail("unknown tool skip failed", str(results))
 
 
 def test_process_response_unknown_tool_error():
-    section("process_response: 未知ツール → error (deny_on_unknown=True)")
+    section("process_response: unknown tool → error (deny_on_unknown=True)")
     gate, _ = make_gate(hitl_dsal=3)
-    adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1", deny_on_unknown_tool=True)
+    adapter = ShaniCoworkAdapter(
+        gate=gate, proposed_by="cowork-agent/v1", deny_on_unknown_tool=True
+    )
 
     fake_response = [
         make_tool_use_block("unknown_tool", {"x": 1}, "tu_err"),
@@ -225,13 +246,13 @@ def test_process_response_unknown_tool_error():
     results = adapter.process_response(fake_response, {})
 
     if len(results) == 1 and results[0].get("is_error"):
-        ok(f"未知ツール → is_error=True: {results[0]['content'][:40]}")
+        ok(f"unknown tool → is_error=True: {results[0]['content'][:40]}")
     else:
-        fail("未知ツール → is_error 期待されたが違う", str(results))
+        fail("unknown tool → expected is_error but got different result", str(results))
 
 
 def test_process_response_denied_returns_error_block():
-    section("process_response: 拒否 → tool_result に is_error=True")
+    section("process_response: deny → tool_result returns is_error=True")
     gate, _ = make_gate(hitl_dsal=1)
     adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1")
 
@@ -248,19 +269,19 @@ def test_process_response_denied_returns_error_block():
     )
 
     if not results:
-        ok("拒否 → tool_result なし（HITL 待機または evaluator 処理）")
+        ok("deny → no tool_result (HITL wait or evaluator processing)")
         return
 
     denied = [r for r in results if r.get("is_error")]
     if denied:
-        ok(f"拒否 → is_error=True: {denied[0]['content'][:60]}")
+        ok(f"deny → is_error=True: {denied[0]['content'][:60]}")
     else:
-        # 承認された場合もある（evaluator 依存）
-        ok(f"bash 承認（evaluator 依存）: {results[0].get('content', '')[:40]}")
+        # Approval is also possible (evaluator dependent)
+        ok(f"bash approved (evaluator dependent): {results[0].get('content', '')[:40]}")
 
 
 def test_wrap_tool_registry():
-    section("wrap_tool_registry: ラップ済み callable が Shani を通過する")
+    section("wrap_tool_registry: wrapped callable passes through Shani")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniCoworkAdapter(gate=gate, proposed_by="cowork-agent/v1")
 
@@ -272,80 +293,81 @@ def test_wrap_tool_registry():
     governed = adapter.wrap_tool_registry(tool_registry)
 
     if "fetch" in governed:
-        ok("wrap_tool_registry: fetch が governed dict に存在する")
+        ok("wrap_tool_registry: fetch exists in governed dict")
     else:
-        fail("wrap_tool_registry: fetch が存在しない")
+        fail("wrap_tool_registry: fetch not found")
         return
 
     result = governed["fetch"]({"url": "https://api.example.com"})
     if called and "fetched" in str(result):
-        ok(f"governed fetch 実行OK: {result}")
+        ok(f"governed fetch executed OK: {result}")
     else:
-        fail("governed fetch 実行失敗", str(result))
+        fail("governed fetch execution failed", str(result))
 
 
 def test_tool_call_in_defaults():
-    section("tool_call が Python デフォルトに存在する")
+    section("tool_call exists in Python defaults")
     if "tool_call" in DEFAULT_DECISION_POLICY:
         ok(f"DEFAULT_DECISION_POLICY['tool_call']={DEFAULT_DECISION_POLICY['tool_call']}")
     else:
-        fail("DEFAULT_DECISION_POLICY に tool_call が存在しない")
+        fail("tool_call not found in DEFAULT_DECISION_POLICY")
 
     if "tool_call" in CapabilityMatrix._FALLBACK:
         ops = sorted(CapabilityMatrix._FALLBACK["tool_call"])
         ok(f"CapabilityMatrix._FALLBACK['tool_call']={ops}")
     else:
-        fail("CapabilityMatrix._FALLBACK に tool_call が存在しない")
+        fail("tool_call not found in CapabilityMatrix._FALLBACK")
 
 
 def test_tool_call_in_policy_yaml():
-    section("tool_call が decision_policy.yaml に存在する")
+    section("tool_call exists in decision_policy.yaml")
     try:
         import yaml
+
         p = os.path.join(os.path.dirname(__file__), "../../policy/decision_policy.yaml")
         with open(p) as f:
             data = yaml.safe_load(f)
         dp = data.get("decision_policy", {})
         if "tool_call" in dp:
-            ok(f"decision_policy.yaml に tool_call={dp['tool_call']}")
+            ok(f"tool_call={dp['tool_call']} found in decision_policy.yaml")
         else:
-            fail("decision_policy.yaml に tool_call が存在しない")
+            fail("tool_call not found in decision_policy.yaml")
 
         cm = data.get("capability_matrix", {})
         if "tool_call" in cm:
             ops = cm["tool_call"].get("operations", [])
-            ok(f"capability_matrix に tool_call: ops={ops}")
+            ok(f"tool_call found in capability_matrix: ops={ops}")
         else:
-            fail("capability_matrix に tool_call が存在しない")
+            fail("tool_call not found in capability_matrix")
 
         reg = data.get("agent_registry", {})
         if "cowork-agent/v1" in reg:
-            ok("agent_registry に cowork-agent/v1 が存在する")
+            ok("cowork-agent/v1 found in agent_registry")
         else:
-            fail("agent_registry に cowork-agent/v1 が存在しない")
+            fail("cowork-agent/v1 not found in agent_registry")
     except ImportError:
-        ok("pyyaml 未インストール → スキップ（CI で確認される）")
+        ok("pyyaml not installed → skipped (verified in CI)")
 
 
 def test_tool_call_type_in_schema():
-    section("DecisionType.TOOL_CALL が schema に存在する")
+    section("DecisionType.TOOL_CALL exists in schema")
     try:
         val = DecisionType.TOOL_CALL.value
         ok(f"DecisionType.TOOL_CALL = '{val}'")
     except AttributeError as e:
-        fail("DecisionType.TOOL_CALL が存在しない", str(e))
+        fail("DecisionType.TOOL_CALL not found", str(e))
 
 
 def test_cowork_policy_inference():
-    section("ツール名からポリシー自動推定")
+    section("auto-infer policy from tool name")
     from shani.adapters.cowork.adapter import _infer_policy
 
     cases = [
-        ("read_file",  DecisionType.DATA_ACCESS),
+        ("read_file", DecisionType.DATA_ACCESS),
         ("fetch_data", DecisionType.DATA_ACCESS),
         ("write_config", DecisionType.CONFIGURATION_CHANGE),
-        ("bash",        DecisionType.AGENT_TASK),
-        ("http_get",    DecisionType.NETWORK_ACTION),
+        ("bash", DecisionType.AGENT_TASK),
+        ("http_get", DecisionType.NETWORK_ACTION),
         ("unknown_xyz", DecisionType.TOOL_CALL),
     ]
 
@@ -354,10 +376,11 @@ def test_cowork_policy_inference():
         if pol.decision_type == expected_dt:
             ok(f"  {name!r} → {pol.decision_type.value}")
         else:
-            fail(f"  {name!r}: 期待={expected_dt.value} 実際={pol.decision_type.value}")
+            fail(f"  {name!r}: expected={expected_dt.value} actual={pol.decision_type.value}")
 
 
-# ───────────────────────────────────────────────────────���─────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     print("\ntest_cowork_adapter.py")

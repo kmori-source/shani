@@ -12,6 +12,7 @@ Tests:
     Fix ②  Replay protection via nonce store
     Fix ③  Delegation escalation prevention via DelegationRules
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -46,31 +47,41 @@ def fail(msg: str, detail: str = "") -> None:
 
 
 def section(title: str) -> None:
-    print(f"\n{'─'*58}")
+    print(f"\n{'─' * 58}")
     print(f"  {title}")
-    print(f"{'─'*58}")
+    print(f"{'─' * 58}")
 
 
 # ===========================================================================
 # Fix ①  Proposal hash — fake ADO detection
 # ===========================================================================
 
+
 def test_proposal_hash():
     section("Fix ① — proposal_hash: ADO must be bound to its proposal")
 
     # Simulate what canonical_hash() does
-    def canonical_hash(decision_id, decision_type, proposed_by, description,
-                       target, requested_dsal, reversibility, blast_radius, expires_at=None):
+    def canonical_hash(
+        decision_id,
+        decision_type,
+        proposed_by,
+        description,
+        target,
+        requested_dsal,
+        reversibility,
+        blast_radius,
+        expires_at=None,
+    ):
         data = {
-            "decision_id":    decision_id,
-            "decision_type":  decision_type,
-            "proposed_by":    proposed_by,
-            "description":    description,
-            "target":         target,
+            "decision_id": decision_id,
+            "decision_type": decision_type,
+            "proposed_by": proposed_by,
+            "description": description,
+            "target": target,
             "requested_dsal": requested_dsal,
-            "reversibility":  reversibility,
-            "blast_radius":   blast_radius,
-            "expires_at":     expires_at,
+            "reversibility": reversibility,
+            "blast_radius": blast_radius,
+            "expires_at": expires_at,
         }
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
@@ -105,11 +116,11 @@ def test_proposal_hash():
 
     # Attack: agent tries to reuse ADO for a different target
     fake_hash = canonical_hash(
-        decision_id="dec-001",       # same decision_id
+        decision_id="dec-001",  # same decision_id
         decision_type="remediation",
         proposed_by="agent-a/v1",
         description="Restart nginx on prod-web-01",
-        target="host:PROD-DB-12",   # DIFFERENT target
+        target="host:PROD-DB-12",  # DIFFERENT target
         requested_dsal=1,
         reversibility=True,
         blast_radius="limited",
@@ -124,7 +135,7 @@ def test_proposal_hash():
         proposed_by="agent-a/v1",
         description="Restart nginx on prod-web-01",
         target="host:prod-web-01",
-        requested_dsal=4,           # ESCALATED
+        requested_dsal=4,  # ESCALATED
         reversibility=True,
         blast_radius="limited",
     )
@@ -142,7 +153,9 @@ def test_proposal_hash():
         reversibility=True,
         blast_radius="limited",
     )
-    assert reclassified_hash != ado_proposal_hash, "Decision type change must produce different hash"
+    assert reclassified_hash != ado_proposal_hash, (
+        "Decision type change must produce different hash"
+    )
     ok("Fake ADO (decision_type reclassification): proposal_hash mismatch detected")
 
     # Hash is deterministic (no randomness, same input = same output)
@@ -156,18 +169,20 @@ def test_proposal_hash():
 # Fix ②  Replay store — nonce-based one-time capability
 # ===========================================================================
 
+
 def test_replay_store():
     section("Fix ② — NonceStore: ADO is one-time capability")
 
     import importlib.util, pathlib as _pl
+
     _spec = importlib.util.spec_from_file_location(
         "replay_store",
         str(_pl.Path(__file__).parent.parent.parent / "shani/security/replay_store.py"),
     )
     _rs = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_rs)
-    InMemoryNonceStore   = _rs.InMemoryNonceStore
-    FileNonceStore       = _rs.FileNonceStore
+    InMemoryNonceStore = _rs.InMemoryNonceStore
+    FileNonceStore = _rs.FileNonceStore
     NonceAlreadyConsumed = _rs.NonceAlreadyConsumed
 
     # ── InMemoryNonceStore ────────────────────────────────────────
@@ -210,8 +225,10 @@ def test_replay_store():
             results.append("blocked")
 
     threads = [threading.Thread(target=try_consume) for _ in range(10)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     ok_count = results.count("ok")
     blocked_count = results.count("blocked")
@@ -257,6 +274,7 @@ def test_replay_store():
 # Fix ③  DelegationRules — privilege escalation prevention
 # ===========================================================================
 
+
 def test_delegation_rules():
     section("Fix ③ — DelegationRules: recursive privilege escalation prevention")
 
@@ -297,7 +315,10 @@ def test_delegation_rules():
         """
         for i, (requested, parent_max) in enumerate(steps):
             if requested > parent_max:
-                return False, f"Step {i+1}: child requests D-SAL {requested} but parent allows max {parent_max}"
+                return (
+                    False,
+                    f"Step {i + 1}: child requests D-SAL {requested} but parent allows max {parent_max}",
+                )
         return True, "chain ok"
 
     # Valid chain: A→B→C each step reduces
@@ -353,13 +374,19 @@ def test_delegation_rules():
 # Integration: all three fixes working together
 # ===========================================================================
 
+
 def test_integration():
     section("Integration — all three fixes working together")
 
     import importlib.util as _iu, pathlib as _pl2
-    _s2 = _iu.spec_from_file_location('rs2', str(_pl2.Path(__file__).parent.parent.parent / 'shani/security/replay_store.py'))
-    _m2 = _iu.module_from_spec(_s2); _s2.loader.exec_module(_m2)
-    InMemoryNonceStore = _m2.InMemoryNonceStore; NonceAlreadyConsumed = _m2.NonceAlreadyConsumed
+
+    _s2 = _iu.spec_from_file_location(
+        "rs2", str(_pl2.Path(__file__).parent.parent.parent / "shani/security/replay_store.py")
+    )
+    _m2 = _iu.module_from_spec(_s2)
+    _s2.loader.exec_module(_m2)
+    InMemoryNonceStore = _m2.InMemoryNonceStore
+    NonceAlreadyConsumed = _m2.NonceAlreadyConsumed
 
     nonce_store = InMemoryNonceStore()
 
@@ -367,27 +394,25 @@ def test_integration():
 
     # 1. Proposal created with canonical hash
     proposal_data = {
-        "decision_id":    "dec-abc",
-        "decision_type":  "remediation",
-        "proposed_by":    "soc-agent/v1",
-        "description":    "Isolate compromised host",
-        "target":         "host:prod-db-12",
+        "decision_id": "dec-abc",
+        "decision_type": "remediation",
+        "proposed_by": "soc-agent/v1",
+        "description": "Isolate compromised host",
+        "target": "host:prod-db-12",
         "requested_dsal": 2,
-        "reversibility":  True,
-        "blast_radius":   "significant",
-        "expires_at":     None,
+        "reversibility": True,
+        "blast_radius": "significant",
+        "expires_at": None,
     }
-    proposal_hash = hashlib.sha256(
-        json.dumps(proposal_data, sort_keys=True).encode()
-    ).hexdigest()
+    proposal_hash = hashlib.sha256(json.dumps(proposal_data, sort_keys=True).encode()).hexdigest()
 
     # 2. ADO issued with nonce and proposal_hash
     nonce = os.urandom(32).hex()
     ado = {
-        "decision_id":     "dec-abc",
+        "decision_id": "dec-abc",
         "authorized_dsal": 2,
-        "proposal_hash":   proposal_hash,
-        "nonce":           nonce,
+        "proposal_hash": proposal_hash,
+        "nonce": nonce,
         "delegation_rules": {
             "allowed_sub_decisions": [],
             "max_child_dsal": 0,
@@ -396,9 +421,7 @@ def test_integration():
     }
 
     # 3. Agent verifies proposal_hash before execution
-    recomputed = hashlib.sha256(
-        json.dumps(proposal_data, sort_keys=True).encode()
-    ).hexdigest()
+    recomputed = hashlib.sha256(json.dumps(proposal_data, sort_keys=True).encode()).hexdigest()
     assert recomputed == ado["proposal_hash"]
     ok("Step 3: Agent verifies proposal_hash — matches")
 
@@ -415,16 +438,17 @@ def test_integration():
 
     # 6. Fake ADO attempt: different target
     fake_proposal = {**proposal_data, "target": "host:ALL-SYSTEMS"}
-    fake_hash = hashlib.sha256(
-        json.dumps(fake_proposal, sort_keys=True).encode()
-    ).hexdigest()
+    fake_hash = hashlib.sha256(json.dumps(fake_proposal, sort_keys=True).encode()).hexdigest()
     assert fake_hash != ado["proposal_hash"]
     ok("Step 6: Fake ADO (different target) — proposal_hash mismatch")
 
     # 7. Delegation escalation attempt blocked
     parent_max_child_dsal = 0  # this ADO does not permit delegation
     child_requested_dsal = 1
-    if parent_max_child_dsal < child_requested_dsal or not ado["delegation_rules"]["allowed_sub_decisions"]:
+    if (
+        parent_max_child_dsal < child_requested_dsal
+        or not ado["delegation_rules"]["allowed_sub_decisions"]
+    ):
         ok("Step 7: Delegation escalation blocked — no sub_decisions allowed")
     else:
         fail("Step 7: Should have blocked escalation")

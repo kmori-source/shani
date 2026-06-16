@@ -21,6 +21,7 @@ Usage:
     from shani.sdk.python.schemas.decision import DecisionProposal
     from shani.sdk.python.adapters.generic import governed_tool
 """
+
 from shani import schemas  # noqa: F401
 
 __all__ = ["schemas"]
@@ -29,5 +30,6 @@ __all__ = ["schemas"]
 def __getattr__(name: str) -> object:
     if name == "adapters":
         from shani import adapters
+
         return adapters
     raise AttributeError(f"module 'shani.sdk.python' has no attribute {name!r}")

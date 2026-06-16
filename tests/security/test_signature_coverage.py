@@ -33,6 +33,7 @@ Fields under test:
 This is a pin test. If a new field is added to the ADO and this test
 does not cover it, the test must be updated to cover it.
 """
+
 from __future__ import annotations
 
 import copy
@@ -67,37 +68,38 @@ def now() -> datetime:
 # Simulate canonical_payload + sign + verify without pydantic
 # ---------------------------------------------------------------------------
 
+
 def make_payload(overrides: dict | None = None) -> dict:
     """Build a canonical signature payload, optionally overriding fields."""
     base = {
-        "decision_id":     "dec-001",
-        "proposal_hash":   "aabbcc" * 10 + "aabb",  # 64 hex chars
-        "authority":       "SecOps-Lead",
+        "decision_id": "dec-001",
+        "proposal_hash": "aabbcc" * 10 + "aabb",  # 64 hex chars
+        "authority": "SecOps-Lead",
         "authorized_dsal": 2,
         "delegation_rules": {
             "allowed_sub_decisions": [],
-            "max_child_dsal":        0,
-            "max_depth":             0,
-            "max_children":          0,
+            "max_child_dsal": 0,
+            "max_depth": 0,
+            "max_children": 0,
         },
-        "nonce":      os.urandom(32).hex(),
-        "issued_at":  now().isoformat(),
+        "nonce": os.urandom(32).hex(),
+        "issued_at": now().isoformat(),
         "expires_at": (now() + timedelta(minutes=5)).isoformat(),
         "exec_context": {
             "decision_type": "network_action",
             "intent_binding": {
-                "intent":          "network_action:Isolate compromised host",
-                "target":          "host:prod-db-12",
-                "scope_summary":   "assets:prod-db-12|max:1",
+                "intent": "network_action:Isolate compromised host",
+                "target": "host:prod-db-12",
+                "scope_summary": "assets:prod-db-12|max:1",
                 "expected_effect": "Host isolated from network",
-                "reversibility":   True,
+                "reversibility": True,
             },
             "parent_decision_id": None,
             "constraints": {"require_confirmation": True},
         },
         # v5.1: cross-org propagated constraints (SPEC §8.8)
         "propagated_constraints": [],
-        "origin_org":             None,
+        "origin_org": None,
     }
     if overrides:
         _deep_update(base, overrides)
@@ -147,7 +149,9 @@ def assert_mutation_breaks_signature(
 
     still_valid = verify(mutated, original_signature)
     if still_valid:
-        fail(f"COVERAGE GAP: {field_description} mutation passed verification — field is NOT signed")
+        fail(
+            f"COVERAGE GAP: {field_description} mutation passed verification — field is NOT signed"
+        )
     else:
         ok(f"Mutation of [{field_description}] → signature fails ✓")
 
@@ -172,75 +176,64 @@ def test_signature_coverage():
 
     mutations = [
         # Identity
-        ("decision_id",
-         {"decision_id": "dec-EVIL"}),
-
+        ("decision_id", {"decision_id": "dec-EVIL"}),
         # Integrity
-        ("proposal_hash",
-         {"proposal_hash": "deadbeef" * 8}),
-
+        ("proposal_hash", {"proposal_hash": "deadbeef" * 8}),
         # Authorization
-        ("authority",
-         {"authority": "Compromised-Authority"}),
-
-        ("authorized_dsal",
-         {"authorized_dsal": 4}),   # escalation attempt
-
+        ("authority", {"authority": "Compromised-Authority"}),
+        ("authorized_dsal", {"authorized_dsal": 4}),  # escalation attempt
         # Delegation rules — all four fields
-        ("delegation_rules.allowed_sub_decisions",
-         {"delegation_rules": {"allowed_sub_decisions": ["policy_update"]}}),
-
-        ("delegation_rules.max_child_dsal",
-         {"delegation_rules": {"max_child_dsal": 3}}),   # escalation
-
-        ("delegation_rules.max_depth",
-         {"delegation_rules": {"max_depth": 99}}),
-
-        ("delegation_rules.max_children",
-         {"delegation_rules": {"max_children": 1000}}),  # fan-out attack
-
+        (
+            "delegation_rules.allowed_sub_decisions",
+            {"delegation_rules": {"allowed_sub_decisions": ["policy_update"]}},
+        ),
+        (
+            "delegation_rules.max_child_dsal",
+            {"delegation_rules": {"max_child_dsal": 3}},
+        ),  # escalation
+        ("delegation_rules.max_depth", {"delegation_rules": {"max_depth": 99}}),
+        (
+            "delegation_rules.max_children",
+            {"delegation_rules": {"max_children": 1000}},
+        ),  # fan-out attack
         # Replay prevention
-        ("nonce",
-         {"nonce": os.urandom(32).hex()}),
-
+        ("nonce", {"nonce": os.urandom(32).hex()}),
         # Temporal
-        ("issued_at",
-         {"issued_at": (now() - timedelta(days=30)).isoformat()}),  # backdating
-
-        ("expires_at",
-         {"expires_at": (now() + timedelta(days=365)).isoformat()}),  # extension
-
+        ("issued_at", {"issued_at": (now() - timedelta(days=30)).isoformat()}),  # backdating
+        ("expires_at", {"expires_at": (now() + timedelta(days=365)).isoformat()}),  # extension
         # Execution context — execution drift attacks
-        ("exec_context.decision_type",
-         {"exec_context": {"decision_type": "policy_update"}}),
-
-        ("exec_context.intent_binding.target",
-         {"exec_context": {"intent_binding": {"target": "host:ALL-SYSTEMS"}}}),
-
-        ("exec_context.intent_binding.intent",
-         {"exec_context": {"intent_binding": {"intent": "policy_update:Delete all data"}}}),
-
-        ("exec_context.intent_binding.scope_summary",
-         {"exec_context": {"intent_binding": {"scope_summary": "assets:ALL|max:9999"}}}),
-
-        ("exec_context.intent_binding.expected_effect",
-         {"exec_context": {"intent_binding": {"expected_effect": "All data deleted"}}}),
-
-        ("exec_context.intent_binding.reversibility",
-         {"exec_context": {"intent_binding": {"reversibility": False}}}),
-
-        ("exec_context.parent_decision_id",
-         {"exec_context": {"parent_decision_id": "injected-parent"}}),
-
-        ("exec_context.constraints",
-         {"exec_context": {"constraints": {"require_confirmation": False}}}),
-
+        ("exec_context.decision_type", {"exec_context": {"decision_type": "policy_update"}}),
+        (
+            "exec_context.intent_binding.target",
+            {"exec_context": {"intent_binding": {"target": "host:ALL-SYSTEMS"}}},
+        ),
+        (
+            "exec_context.intent_binding.intent",
+            {"exec_context": {"intent_binding": {"intent": "policy_update:Delete all data"}}},
+        ),
+        (
+            "exec_context.intent_binding.scope_summary",
+            {"exec_context": {"intent_binding": {"scope_summary": "assets:ALL|max:9999"}}},
+        ),
+        (
+            "exec_context.intent_binding.expected_effect",
+            {"exec_context": {"intent_binding": {"expected_effect": "All data deleted"}}},
+        ),
+        (
+            "exec_context.intent_binding.reversibility",
+            {"exec_context": {"intent_binding": {"reversibility": False}}},
+        ),
+        (
+            "exec_context.parent_decision_id",
+            {"exec_context": {"parent_decision_id": "injected-parent"}},
+        ),
+        (
+            "exec_context.constraints",
+            {"exec_context": {"constraints": {"require_confirmation": False}}},
+        ),
         # v5.1: cross-org fields must also be signed
-        ("propagated_constraints",
-         {"propagated_constraints": ["attacker:constraint"]}),
-
-        ("origin_org",
-         {"origin_org": "attacker-org"}),
+        ("propagated_constraints", {"propagated_constraints": ["attacker:constraint"]}),
+        ("origin_org", {"origin_org": "attacker-org"}),
     ]
 
     for field_desc, override in mutations:

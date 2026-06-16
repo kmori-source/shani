@@ -11,6 +11,7 @@ Usage:
     python -m tests.conformance.runner --json report.json
     python tests/conformance/runner.py
 """
+
 from __future__ import annotations
 
 import json
@@ -25,10 +26,12 @@ def _load_pydantic_shim() -> None:
     """Ensure pydantic is importable (shim for environments without it)."""
     try:
         import pydantic  # noqa: F401
+
         return
     except ImportError:
         pass
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -44,6 +47,7 @@ def _load_pydantic_shim() -> None:
 _load_pydantic_shim()
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from .test_must_fail import run as run_must_fail
@@ -71,9 +75,9 @@ def run_all(json_output_path: str | None = None) -> int:
 
     # Combined summary
     all_results = must_fail_suite.report.results + must_pass_suite.report.results
-    total   = len(all_results)
-    passed  = sum(1 for r in all_results if r.passed)
-    failed  = total - passed
+    total = len(all_results)
+    passed = sum(1 for r in all_results if r.passed)
+    failed = total - passed
 
     finished = datetime.now(tz=timezone.utc)
     duration = (finished - started).total_seconds()
@@ -81,8 +85,12 @@ def run_all(json_output_path: str | None = None) -> int:
     print("\n" + "=" * 60)
     print("  CONFORMANCE SUMMARY")
     print("─" * 60)
-    print(f"  MUST FAIL : {must_fail_suite.report.passed_count}/{must_fail_suite.report.total} passed")
-    print(f"  MUST PASS : {must_pass_suite.report.passed_count}/{must_pass_suite.report.total} passed")
+    print(
+        f"  MUST FAIL : {must_fail_suite.report.passed_count}/{must_fail_suite.report.total} passed"
+    )
+    print(
+        f"  MUST PASS : {must_pass_suite.report.passed_count}/{must_pass_suite.report.total} passed"
+    )
     print(f"  TOTAL     : {passed}/{total} passed  ({failed} failed)")
     print(f"  Duration  : {duration:.2f}s")
 
@@ -100,12 +108,12 @@ def run_all(json_output_path: str | None = None) -> int:
 
     if json_output_path:
         report_data = {
-            "started_at":  started.isoformat(),
+            "started_at": started.isoformat(),
             "finished_at": finished.isoformat(),
             "duration_seconds": round(duration, 3),
-            "total":   total,
-            "passed":  passed,
-            "failed":  failed,
+            "total": total,
+            "passed": passed,
+            "failed": failed,
             "suites": {
                 "must_fail": json.loads(must_fail_suite.report.to_json()),
                 "must_pass": json.loads(must_pass_suite.report.to_json()),
@@ -123,7 +131,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Shani Conformance Test Runner")
     parser.add_argument(
-        "--json", metavar="PATH",
+        "--json",
+        metavar="PATH",
         help="Write structured JSON report to this file",
         default=None,
     )

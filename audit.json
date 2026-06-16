@@ -1,0 +1,79 @@
+{
+  "schema_version": "1",
+  "run_at": "2026-06-16T01:54:13.063022+00:00",
+  "agent_id": "vuln-remediation-agent/v1",
+  "mode": "auto",
+  "summary": {
+    "total": 5,
+    "executed": 5,
+    "denied": 0,
+    "skipped": 0
+  },
+  "entries": [
+    {
+      "timestamp": "2026-06-16T01:54:06.731144+00:00",
+      "vuln_id": "PYSEC-2026-196",
+      "package": "pip",
+      "installed_version": "24.0",
+      "fix_version": "26.1.2",
+      "severity": "MEDIUM",
+      "action": "executed",
+      "proposal_id": "4888c176-d19b-4d3c-b616-63b620a1ae1e",
+      "ado_id": "4888c176-d19b-4d3c-b616-63b620a1ae1e",
+      "approved_by": "SecOps-Lead",
+      "detail": "OK: upgraded to 26.1.2"
+    },
+    {
+      "timestamp": "2026-06-16T01:54:08.501201+00:00",
+      "vuln_id": "CVE-2025-8869",
+      "package": "pip",
+      "installed_version": "24.0",
+      "fix_version": "25.3",
+      "severity": "MEDIUM",
+      "action": "executed",
+      "proposal_id": "99682e85-8abb-43c5-a4c1-0fe6d6fd1e02",
+      "ado_id": "99682e85-8abb-43c5-a4c1-0fe6d6fd1e02",
+      "approved_by": "SecOps-Lead",
+      "detail": "OK: upgraded to 25.3"
+    },
+    {
+      "timestamp": "2026-06-16T01:54:09.859863+00:00",
+      "vuln_id": "CVE-2026-1703",
+      "package": "pip",
+      "installed_version": "24.0",
+      "fix_version": "26.0",
+      "severity": "MEDIUM",
+      "action": "executed",
+      "proposal_id": "7b45f177-3094-4063-9cf6-00dd6a354b1f",
+      "ado_id": "7b45f177-3094-4063-9cf6-00dd6a354b1f",
+      "approved_by": "SecOps-Lead",
+      "detail": "OK: upgraded to 26.0"
+    },
+    {
+      "timestamp": "2026-06-16T01:54:11.265322+00:00",
+      "vuln_id": "CVE-2026-3219",
+      "package": "pip",
+      "installed_version": "24.0",
+      "fix_version": "26.1",
+      "severity": "MEDIUM",
+      "action": "executed",
+      "proposal_id": "3cb5c64c-38b7-4a65-a227-4d92cf50f50c",
+      "ado_id": "3cb5c64c-38b7-4a65-a227-4d92cf50f50c",
+      "approved_by": "SecOps-Lead",
+      "detail": "OK: upgraded to 26.1"
+    },
+    {
+      "timestamp": "2026-06-16T01:54:12.698773+00:00",
+      "vuln_id": "CVE-2026-6357",
+      "package": "pip",
+      "installed_version": "24.0",
+      "fix_version": "26.1",
+      "severity": "MEDIUM",
+      "action": "executed",
+      "proposal_id": "bd43f35a-b4b3-46e1-aa02-4f467375870a",
+      "ado_id": "bd43f35a-b4b3-46e1-aa02-4f467375870a",
+      "approved_by": "SecOps-Lead",
+      "detail": "OK: upgraded to 26.1"
+    }
+  ]
+}

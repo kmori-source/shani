@@ -116,14 +116,16 @@ def shani_tools(
         name = getattr(tool, "name", type(tool).__name__)
         tool_policy = policy.get(name, policy.get(type(tool).__name__, {}))
 
-        governed.append(ShaniLangChainTool(
-            tool=tool,
-            gate=gate,
-            decision_type=tool_policy.get("decision_type", default_decision_type),
-            blast_radius=tool_policy.get("blast_radius", default_blast_radius),
-            proposed_by=proposed_by,
-            target_extractor=tool_policy.get("target_extractor"),
-        ))
+        governed.append(
+            ShaniLangChainTool(
+                tool=tool,
+                gate=gate,
+                decision_type=tool_policy.get("decision_type", default_decision_type),
+                blast_radius=tool_policy.get("blast_radius", default_blast_radius),
+                proposed_by=proposed_by,
+                target_extractor=tool_policy.get("target_extractor"),
+            )
+        )
         logger.info("Governed tool: %s (dsal=%s)", name, "(auto)")
 
     return governed
@@ -262,7 +264,7 @@ class ShaniLangGraph:
 
     def __init__(
         self,
-        graph: Any,                              # CompiledGraph
+        graph: Any,  # CompiledGraph
         gate: GovernanceGate,
         proposed_by: str,
         mid_monitor: MidExecutionMonitor | None = None,
@@ -324,19 +326,23 @@ class ShaniLangGraph:
                 # Resume graph after approval
                 result = self._graph.invoke(None, config=config, **kwargs)
 
-            self._run_audit.append({
-                "run_id": run_id,
-                "status": "completed",
-                "completed_at": datetime.now(tz=timezone.utc).isoformat(),
-            })
+            self._run_audit.append(
+                {
+                    "run_id": run_id,
+                    "status": "completed",
+                    "completed_at": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            )
             return result
 
         except Exception as e:
-            self._run_audit.append({
-                "run_id": run_id,
-                "status": "failed",
-                "error": str(e),
-            })
+            self._run_audit.append(
+                {
+                    "run_id": run_id,
+                    "status": "failed",
+                    "error": str(e),
+                }
+            )
             raise
 
     def get_audit_trail(self) -> list[dict]:
@@ -368,13 +374,15 @@ class ShaniLangGraph:
         if isinstance(result, DeniedDecision):
             return False
 
-        self._run_audit.append({
-            "node": node_name,
-            "decision_id": result.decision_id,
-            "dsal": result.authorized_dsal,
-            "authority": result.authority,
-            "authorized_at": result.authorized_at.isoformat(),
-        })
+        self._run_audit.append(
+            {
+                "node": node_name,
+                "decision_id": result.decision_id,
+                "dsal": result.authorized_dsal,
+                "authority": result.authority,
+                "authorized_at": result.authorized_at.isoformat(),
+            }
+        )
         return True
 
     @staticmethod

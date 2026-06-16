@@ -10,6 +10,7 @@ consistently and that type boundaries are well-defined:
 - confidence as int (coercion from int to float)
 - Boolean fields: reversibility and delegation
 """
+
 from __future__ import annotations
 
 import os
@@ -39,6 +40,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest

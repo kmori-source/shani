@@ -11,6 +11,7 @@ Usage:
         StaticAuthorityProvider, YAMLAuthorityProvider,
     )
 """
+
 from shani.authority.provider import StaticAuthorityProvider, YAMLAuthorityProvider
 from shani.authority.policy import (
     DecisionPolicyProvider,

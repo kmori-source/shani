@@ -10,6 +10,7 @@ Property being tested:
     - Missing signature → no change (backwards-compatible)
     - Only one of signature/signed_by present → treated as invalid
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani.schemas.decision import EvidenceItem
@@ -50,11 +52,18 @@ def fail(msg: str) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_keypair():
     """Generate an Ed25519 keypair for testing."""
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            PublicFormat,
+            PrivateFormat,
+            NoEncryption,
+        )
+
         priv = Ed25519PrivateKey.generate()
         priv_bytes = priv.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
         pub_bytes = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
@@ -65,16 +74,20 @@ def _make_keypair():
         return key, key  # private == public in HMAC offline mode
 
 
-def _sign_evidence(source: str, content: str, priv_bytes: bytes, pub_bytes: bytes) -> tuple[str, str]:
+def _sign_evidence(
+    source: str, content: str, priv_bytes: bytes, pub_bytes: bytes
+) -> tuple[str, str]:
     """Sign evidence content, return (signature_b64, pub_key_b64)."""
     data = _canonical_evidence_bytes(source, content)
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
         priv = Ed25519PrivateKey.from_private_bytes(priv_bytes)
         sig_bytes = priv.sign(data)
     except ImportError:
         import hmac as _hmac
         import hashlib as _hashlib
+
         sig_bytes = _hmac.new(priv_bytes, data, _hashlib.sha256).digest()
     return base64.b64encode(sig_bytes).decode(), base64.b64encode(pub_bytes).decode()
 
@@ -139,10 +152,13 @@ def test_valid_signature_boosts_trust():
 
     # trust_multiplier should be base + bonus, capped at 1.0
     from shani.risk.evidence import classify_source
+
     trust = classify_source(source)
     expected_mult = round(min(1.0, _TRUST_MULTIPLIER[trust] + _SIGNATURE_VALID_BONUS), 3)
     if abs(ie["trust_multiplier"] - expected_mult) < 1e-6:
-        ok(f"trust_multiplier boosted to {ie['trust_multiplier']} (base + {_SIGNATURE_VALID_BONUS})")
+        ok(
+            f"trust_multiplier boosted to {ie['trust_multiplier']} (base + {_SIGNATURE_VALID_BONUS})"
+        )
     else:
         fail(f"Expected trust_multiplier={expected_mult}, got {ie['trust_multiplier']}")
 
@@ -185,7 +201,9 @@ def test_invalid_signature_penalized():
     if abs(ie["trust_multiplier"] - _SIGNATURE_INVALID_MULTIPLIER) < 1e-6:
         ok(f"trust_multiplier overridden to {_SIGNATURE_INVALID_MULTIPLIER}")
     else:
-        fail(f"Expected trust_multiplier={_SIGNATURE_INVALID_MULTIPLIER}, got {ie['trust_multiplier']}")
+        fail(
+            f"Expected trust_multiplier={_SIGNATURE_INVALID_MULTIPLIER}, got {ie['trust_multiplier']}"
+        )
     if eval_result.flags.get("signature_invalid"):
         ok("'signature_invalid' flag set")
     else:

@@ -1,12 +1,11 @@
 """
 Shani nanoclaw Adapter.
 
-nanoclaw エージェントのツール呼び出しを Shani ガバナンスで制御する。
+Controls nanoclaw agent tool calls with Shani governance.
 
-nanoclaw は qwibitai/nanoclaw の軽量 Python エージェントフレームワーク。
-本アダプターは nanoclaw の Agent.tools を Shani でラップし、
-Shani Specification v0.3 に従った DecisionProposal → ADO → Capability
-フローを強制する。
+nanoclaw is a lightweight Python agent framework from qwibitai/nanoclaw.
+This adapter wraps nanoclaw's Agent.tools with Shani, enforcing the
+DecisionProposal → ADO → Capability flow per Shani Specification v0.3.
 
 Usage (zero-change integration):
 
@@ -74,24 +73,24 @@ logger = logging.getLogger("shani.adapter.nanoclaw")
 
 
 class NanoclawToolAction(str, Enum):
-    """nanoclaw のツール種別に対応したアクション分類。"""
-    READ    = "read"     # 読み取り専用ツール（http_get, read_file 相当）
-    WRITE   = "write"    # 書き込みツール（write_file, http_post 相当）
-    EXECUTE = "execute"  # コマンド実行ツール（run_command 相当）
-    FETCH   = "fetch"    # 外部 API フェッチ（http_get 相当）
+    """Action classification corresponding to nanoclaw tool types."""
 
+    READ = "read"  # read-only tools (http_get, read_file equivalent)
+    WRITE = "write"  # write tools (write_file, http_post equivalent)
+    EXECUTE = "execute"  # command execution tools (run_command equivalent)
+    FETCH = "fetch"  # external API fetch (http_get equivalent)
 
-# デフォルトポリシー — ツール名パターンで決定型を推定
+# Default policy — infers decision type from tool name patterns
 NANOCLAW_TOOL_POLICY: dict[NanoclawToolAction, tuple[DecisionType, BlastRadius, bool]] = {
-    NanoclawToolAction.READ:    (DecisionType.DATA_ACCESS,          BlastRadius.ISOLATED,    True),
-    NanoclawToolAction.FETCH:   (DecisionType.DATA_ACCESS,          BlastRadius.ISOLATED,    True),
-    NanoclawToolAction.WRITE:   (DecisionType.CONFIGURATION_CHANGE, BlastRadius.LIMITED,     True),
-    NanoclawToolAction.EXECUTE: (DecisionType.AGENT_TASK,           BlastRadius.SIGNIFICANT, False),
+    NanoclawToolAction.READ: (DecisionType.DATA_ACCESS, BlastRadius.ISOLATED, True),
+    NanoclawToolAction.FETCH: (DecisionType.DATA_ACCESS, BlastRadius.ISOLATED, True),
+    NanoclawToolAction.WRITE: (DecisionType.CONFIGURATION_CHANGE, BlastRadius.LIMITED, True),
+    NanoclawToolAction.EXECUTE: (DecisionType.AGENT_TASK, BlastRadius.SIGNIFICANT, False),
 }
 
 
 def _infer_action(tool_name: str) -> NanoclawToolAction:
-    """ツール名からデフォルトの NanoclawToolAction を推定する。"""
+    """Infers the default NanoclawToolAction from the tool name."""
     name = tool_name.lower()
     if any(kw in name for kw in ("write", "save", "update", "put", "post", "create", "delete")):
         return NanoclawToolAction.WRITE
@@ -104,12 +103,12 @@ def _infer_action(tool_name: str) -> NanoclawToolAction:
 
 class ShaniNanoclawAdapter:
     """
-    nanoclaw エージェントのツール呼び出しを Shani ガバナンスでラップするアダプター。
+    Adapter that wraps nanoclaw agent tool calls with Shani governance.
 
-    nanoclaw の Agent.tools に登録された callable を intercept し、
-    実行前に DecisionProposal → ADO フローを強制する。
+    Intercepts callables registered in nanoclaw's Agent.tools and
+    enforces the DecisionProposal → ADO flow before execution.
 
-    同一 action+target の HITL リクエストは重複排除される。
+    HITL requests with the same action+target are deduplicated.
     """
 
     def __init__(
@@ -140,31 +139,31 @@ class ShaniNanoclawAdapter:
         confidence: float = 0.8,
     ) -> Any:
         """
-        nanoclaw ツールを Shani ガバナンス経由で同期実行する。
+        Synchronously executes a nanoclaw tool through Shani governance.
 
         Args:
-            tool_name:     ツール名（ログ・DecisionProposal に使用）
-            tool_fn:       実際の callable
-            kwargs:        ツールに渡す引数
-            decision_type: None の場合ツール名から自動推定
-            blast_radius:  None の場合 action から自動設定
-            reversibility: None の場合 action から自動設定
-            evidence:      追加エビデンス
-            confidence:    エージェントの確信度
+            tool_name:     tool name (used in logs and DecisionProposal)
+            tool_fn:       the actual callable
+            kwargs:        arguments to pass to the tool
+            decision_type: if None, inferred from tool name
+            blast_radius:  if None, set automatically from action
+            reversibility: if None, set automatically from action
+            evidence:      additional evidence
+            confidence:    agent confidence level
 
         Returns:
-            tool_fn(**kwargs) の戻り値
+            return value of tool_fn(**kwargs)
 
         Raises:
-            PermissionError: Shani がアクションを拒否した場合
-            RuntimeError:    ADO バインディング検証失敗
+            PermissionError: if Shani denies the action
+            RuntimeError:    ADO binding verification failure
         """
         action = _infer_action(tool_name)
         default_dt, default_br, default_rev = NANOCLAW_TOOL_POLICY[action]
 
-        dt  = decision_type  if decision_type  is not None else default_dt
-        br  = blast_radius   if blast_radius   is not None else default_br
-        rev = reversibility  if reversibility  is not None else default_rev
+        dt = decision_type if decision_type is not None else default_dt
+        br = blast_radius if blast_radius is not None else default_br
+        rev = reversibility if reversibility is not None else default_rev
 
         target = f"{tool_name}:{str(kwargs)[:60]}"
         ev_items = [
@@ -174,15 +173,17 @@ class ShaniNanoclawAdapter:
                 confidence=0.75,
             )
         ]
-        for e in (evidence or []):
+        for e in evidence or []:
             if isinstance(e, EvidenceItem):
                 ev_items.append(e)
             elif isinstance(e, dict):
-                ev_items.append(EvidenceItem(
-                    source=e.get("source", "nanoclaw"),
-                    content=e.get("content", ""),
-                    confidence=float(e.get("confidence", 0.8)),
-                ))
+                ev_items.append(
+                    EvidenceItem(
+                        source=e.get("source", "nanoclaw"),
+                        content=e.get("content", ""),
+                        confidence=float(e.get("confidence", 0.8)),
+                    )
+                )
 
         proposal = DecisionProposal(
             decision_type=dt,
@@ -200,9 +201,7 @@ class ShaniNanoclawAdapter:
         result = self._gate.evaluate(proposal)
         if isinstance(result, DeniedDecision):
             logger.warning("nanoclaw tool DENIED | tool=%s reason=%s", tool_name, result.reason)
-            raise PermissionError(
-                f"Shani denied nanoclaw tool '{tool_name}': {result.reason}"
-            )
+            raise PermissionError(f"Shani denied nanoclaw tool '{tool_name}': {result.reason}")
 
         logger.info("nanoclaw tool EXECUTING | tool=%s dsal=%s", tool_name, result.authorized_dsal)
         output = tool_fn(**kwargs)
@@ -219,10 +218,10 @@ class ShaniNanoclawAdapter:
         confidence: float = 0.8,
     ) -> ShaniToolWrapper:
         """
-        nanoclaw ツール関数を ShaniToolWrapper でラップして返す。
+        Wraps a nanoclaw tool function in a ShaniToolWrapper and returns it.
 
-        返された callable は元の tool_fn と同じシグネチャを持ち、
-        呼び出しのたびに Shani ガバナンスを通過する。
+        The returned callable has the same signature as the original tool_fn
+        and passes through Shani governance on every call.
 
         Example:
             agent.tools["fetch"] = adapter.wrap_tool("fetch", original_fetch)
@@ -233,11 +232,11 @@ class ShaniNanoclawAdapter:
         return ShaniToolWrapper(
             fn=tool_fn,
             gate=self._gate,
-            decision_type=decision_type  if decision_type  is not None else default_dt,
-            blast_radius=blast_radius    if blast_radius    is not None else default_br,
+            decision_type=decision_type if decision_type is not None else default_dt,
+            blast_radius=blast_radius if blast_radius is not None else default_br,
             proposed_by=self._proposed_by,
             target_extractor=tool_name,
-            reversibility=reversibility  if reversibility   is not None else default_rev,
+            reversibility=reversibility if reversibility is not None else default_rev,
             confidence=confidence,
             timeout_minutes=self._timeout_minutes,
         )
@@ -252,27 +251,27 @@ def patch_nanoclaw_agent(
     default_decision_type: DecisionType | None = None,
 ) -> None:
     """
-    nanoclaw Agent の tools を Shani ガバナンス版に置き換える（in-place）。
+    Replaces a nanoclaw Agent's tools with Shani-governed versions (in-place).
 
-    nanoclaw Agent は tools を dict または list で保持している前提。
-    本関数はその構造を自動検出し、全ツールを ShaniToolWrapper でラップする。
+    Assumes the nanoclaw Agent holds tools as a dict or list.
+    This function auto-detects that structure and wraps all tools in ShaniToolWrapper.
 
     Args:
-        agent:                 nanoclaw.Agent インスタンス
-        gate:                  ShaniEvaluator または HITLGate
-        proposed_by:           エージェント識別子（policy.yaml の agent_registry と一致させること）
-        policy:                ツール名 → {decision_type, blast_radius, ...} の上書きポリシー
-        default_blast_radius:  ポリシー未指定のツールに適用するデフォルト
-        default_decision_type: ポリシー未指定のツールに適用するデフォルト
+        agent:                 nanoclaw.Agent instance
+        gate:                  ShaniEvaluator or HITLGate
+        proposed_by:           agent identifier (must match agent_registry in policy.yaml)
+        policy:                tool name → {decision_type, blast_radius, ...} override policy
+        default_blast_radius:  default applied to tools without a policy entry
+        default_decision_type: default applied to tools without a policy entry
 
     Note:
-        nanoclaw の Agent.tools が dict の場合は直接パッチ。
-        list の場合は {fn.__name__: fn} に変換してパッチ。
+        If nanoclaw's Agent.tools is a dict, patch directly.
+        If it's a list, convert to {fn.__name__: fn} before patching.
     """
     policy = policy or {}
     adapter = ShaniNanoclawAdapter(gate=gate, proposed_by=proposed_by)
 
-    # nanoclaw Agent が tools を持つ場合にパッチ
+    # Patch if the nanoclaw Agent has a tools attribute
     tools = getattr(agent, "tools", None)
     if tools is None:
         logger.warning("nanoclaw Agent has no .tools attribute. Nothing to patch.")
@@ -310,8 +309,7 @@ def patch_nanoclaw_agent(
 
     else:
         logger.warning(
-            "Unsupported agent.tools type: %s. "
-            "Use ShaniNanoclawAdapter.wrap_tool() directly.",
+            "Unsupported agent.tools type: %s. Use ShaniNanoclawAdapter.wrap_tool() directly.",
             type(tools).__name__,
         )
         return

@@ -6,6 +6,7 @@ Commands:
     shani check                      Quick end-to-end ADO issuance check
     shani demo                       HITL demo (auto-approve mode)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,9 +22,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="shani",
         description="Shani — Autonomous Decision Governance Layer CLI",
     )
-    parser.add_argument(
-        "--version", action="store_true", help="Print version and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     # evaluate
@@ -37,15 +36,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to a DecisionProposal JSON file",
     )
     p_eval.add_argument(
-        "--max-dsal", type=int, default=3,
+        "--max-dsal",
+        type=int,
+        default=3,
         help="Maximum authorized D-SAL ceiling (default: 3)",
     )
     p_eval.add_argument(
-        "--policy", metavar="policy.yaml",
+        "--policy",
+        metavar="policy.yaml",
         help="Path to authority/policy YAML file",
     )
     p_eval.add_argument(
-        "--output", choices=["human", "json"], default="human",
+        "--output",
+        choices=["human", "json"],
+        default="human",
         help="Output format (default: human)",
     )
 
@@ -61,7 +65,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run HITL approval demo (auto-approve by default)",
     )
     p_demo.add_argument(
-        "--mode", choices=["approve", "deny", "interactive"],
+        "--mode",
+        choices=["approve", "deny", "interactive"],
         default="approve",
         help="HITL response mode (default: approve)",
     )
@@ -75,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.version:
         from shani import __version__
+
         print(f"shani {__version__}")
         return 0
 

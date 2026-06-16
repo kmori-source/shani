@@ -13,47 +13,76 @@ Tests for two design issues addressed before OSS release.
    - DecisionBoundaryViolation carries DenialContext
    - to_human_summary() returns reasons in a form humans can understand
 """
+
 from __future__ import annotations
 
 import os, sys, tempfile, json
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"):
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from shani.schemas.decision import (
-    DecisionProposal, DecisionType, BlastRadius, DecisionScope, EvidenceItem
+    DecisionProposal,
+    DecisionType,
+    BlastRadius,
+    DecisionScope,
+    EvidenceItem,
 )
 
 PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures = []
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
 
-def future(): return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
+
+
+def future():
+    return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
 
 def prop(**kw) -> DecisionProposal:
     defaults = dict(
-        decision_type=DecisionType.REMEDIATION, proposed_by="a/v1",
+        decision_type=DecisionType.REMEDIATION,
+        proposed_by="a/v1",
         description="restart nginx on dev server after high CPU alert",
-        target="host:dev-01", scope=DecisionScope(),
+        target="host:dev-01",
+        scope=DecisionScope(),
         evidence=[EvidenceItem(source="monitor", content="high CPU", confidence=0.9)],
-        confidence=0.9, reversibility=True, blast_radius=BlastRadius.LIMITED,
-        delegation=False, expires_at=future(),
+        confidence=0.9,
+        reversibility=True,
+        blast_radius=BlastRadius.LIMITED,
+        delegation=False,
+        expires_at=future(),
     )
     defaults.update(kw)
     return DecisionProposal(**defaults)
@@ -62,6 +91,7 @@ def prop(**kw) -> DecisionProposal:
 # ─────────────────────────────────────────────────────────────────────────────
 # ① Capability matrix transparency
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_capability_matrix_from_policy_yaml():
     section("① CapabilityMatrixLoader reads from policy.yaml")
@@ -73,7 +103,7 @@ def test_capability_matrix_from_policy_yaml():
     ops = loader.get_operations("data_access")
     ok(f"data_access ops from policy.yaml: {sorted(ops)}")
     assert "http_get" in ops
-    assert "http_post" not in ops   # data_access does not include POST
+    assert "http_post" not in ops  # data_access does not include POST
     ok("data_access: http_get allowed, http_post disallowed (least privilege)")
 
     ops_remediation = loader.get_operations("remediation")
@@ -106,7 +136,7 @@ capability_matrix:
     operations: [http_get, http_post, http_put, http_delete]
     note: "full access for testing"
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(custom_yaml)
         tmp_path = f.name
 
@@ -114,6 +144,7 @@ capability_matrix:
         # CapabilityMatrix takes data directly
         # read yaml file and pass matrix_data
         import yaml as _yaml
+
         with open(tmp_path) as f:
             data = _yaml.safe_load(f)
         loader = CapabilityMatrixLoader(data.get("capability_matrix"))
@@ -133,26 +164,27 @@ def test_no_hardcoded_matrix_in_code():
     section("① Verify _DECISION_TYPE_OPS is not hardcoded in code")
 
     import pathlib
-    cap_src = pathlib.Path('shani/boundary/capability.py').read_text()
+
+    cap_src = pathlib.Path("shani/boundary/capability.py").read_text()
 
     # verify no hardcoded dict exists
-    assert '_DECISION_TYPE_OPS' not in cap_src, \
-        "_DECISION_TYPE_OPS still exists in code"
+    assert "_DECISION_TYPE_OPS" not in cap_src, "_DECISION_TYPE_OPS still exists in code"
     ok("_DECISION_TYPE_OPS does not exist in code (policy.yaml is the single source of truth)")
 
     # verify CapabilityMatrix class exists in policy.py
-    policy_src = pathlib.Path('shani/authority/policy.py').read_text()
-    assert 'class CapabilityMatrix:' in policy_src
+    policy_src = pathlib.Path("shani/authority/policy.py").read_text()
+    assert "class CapabilityMatrix:" in policy_src
     ok("class CapabilityMatrix exists in policy.py (separated from boundary)")
 
     # verify no direct operation mapping exists in code
-    assert '"http_get", "read_file"' not in cap_src or 'FALLBACK' in cap_src
+    assert '"http_get", "read_file"' not in cap_src or "FALLBACK" in cap_src
     ok("operation mapping is fallback only (policy.yaml takes precedence)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ② Evidence encapsulation timing
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_denial_context_in_denied_decision():
     section("② DeniedDecision carries pipeline_result + proposal")
@@ -184,13 +216,11 @@ def test_denial_context_in_denied_decision():
     ok(f"DeniedDecision returned: {result.reason[:50]}")
 
     # verify pipeline_result is embedded
-    assert result.pipeline_result is not None, \
-        "pipeline_result is not embedded in DeniedDecision"
+    assert result.pipeline_result is not None, "pipeline_result is not embedded in DeniedDecision"
     ok("pipeline_result is embedded")
 
     # verify proposal is embedded
-    assert result.proposal is not None, \
-        "proposal is not embedded in DeniedDecision"
+    assert result.proposal is not None, "proposal is not embedded in DeniedDecision"
     assert result.proposal.target == "host:dev-01"
     ok("proposal snapshot is embedded")
 
@@ -227,7 +257,7 @@ def test_denial_context_no_evidence():
     p_no_ev = prop(
         decision_type=DecisionType.NETWORK_ACTION,
         target="host:prod-firewall",
-        evidence=[],       # ← empty
+        evidence=[],  # ← empty
         blast_radius=BlastRadius.SIGNIFICANT,
     )
     result = evaluator.evaluate(p_no_ev)
@@ -330,8 +360,11 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
-        import sys; sys.exit(1)
+        for f in _failures:
+            print(f"    • {f}")
+        import sys
+
+        sys.exit(1)
     else:
         print("  All tests passed\n")
         print("  ① Capability matrix transparency:")

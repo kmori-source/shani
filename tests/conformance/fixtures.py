@@ -7,6 +7,7 @@ All factories are imported from tests/fixtures/ and re-exported here so that
 existing conformance tests (which add this directory to sys.path and import
 from 'fixtures') continue to work unchanged.
 """
+
 from __future__ import annotations
 
 import os
@@ -21,6 +22,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -33,6 +35,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # Re-export everything from the new tests/fixtures/ modules

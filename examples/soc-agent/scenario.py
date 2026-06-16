@@ -11,30 +11,42 @@ Simulates a Security Operations Center agent that:
 Run:
     python scenario.py
 """
+
 from __future__ import annotations
 
 import os
 import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _s = _iu.spec_from_file_location("_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _m = _iu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    _s = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _m = _iu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
     _sh = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"): setattr(_sh, _k, getattr(_m, _k))
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
+        setattr(_sh, _k, getattr(_m, _k))
     sys.modules["pydantic"] = _sh
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from shani import (
-    ShaniEvaluator, StaticAuthorityProvider,
-    DecisionType, BlastRadius, DeniedDecision,
+    ShaniEvaluator,
+    StaticAuthorityProvider,
+    DecisionType,
+    BlastRadius,
+    DeniedDecision,
     DISIntegrityMonitor,
 )
 from shani.schemas.state import DISStateMachine
@@ -45,11 +57,12 @@ from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
 @dataclass
 class SecurityAlert:
     """Simulates an incoming security alert from SIEM/EDR."""
+
     alert_id: str
-    severity: str            # critical, high, medium, low
-    target: str              # affected resource
+    severity: str  # critical, high, medium, low
+    target: str  # affected resource
     description: str
-    sources: list[tuple[str, str, float]]   # [(source, content, confidence)]
+    sources: list[tuple[str, str, float]]  # [(source, content, confidence)]
 
 
 def build_evaluator() -> ShaniEvaluator:
@@ -57,9 +70,13 @@ def build_evaluator() -> ShaniEvaluator:
         "soc-agent/v1": AgentIdentity(
             agent_id="soc-agent/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                "remediation", "network_action", "configuration_change",
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    "remediation",
+                    "network_action",
+                    "configuration_change",
+                ]
+            ),
         ),
     }
     dis = DISStateMachine()
@@ -75,9 +92,9 @@ def build_evaluator() -> ShaniEvaluator:
 def alert_to_proposal(alert: SecurityAlert) -> DecisionProposal:
     """Convert a security alert to a Shani DecisionProposal."""
     severity_to_blast = {
-        "low":      BlastRadius.ISOLATED,
-        "medium":   BlastRadius.LIMITED,
-        "high":     BlastRadius.SIGNIFICANT,
+        "low": BlastRadius.ISOLATED,
+        "medium": BlastRadius.LIMITED,
+        "high": BlastRadius.SIGNIFICANT,
         "critical": BlastRadius.CRITICAL,
     }
     blast = severity_to_blast.get(alert.severity, BlastRadius.LIMITED)
@@ -115,7 +132,9 @@ def handle_alert(evaluator: ShaniEvaluator, alert: SecurityAlert) -> None:
         summary = result.to_human_summary()
         print(f"  ✗ BLOCKED  — {summary['reason'][:70]}")
         if summary.get("risk_score"):
-            print(f"    risk_score={summary['risk_score']}  dsal={summary.get('effective_dsal','?')}")
+            print(
+                f"    risk_score={summary['risk_score']}  dsal={summary.get('effective_dsal', '?')}"
+            )
         print(f"  → Escalating to SOC analyst for manual review…")
     else:
         ado = result
@@ -143,8 +162,8 @@ SCENARIOS: list[SecurityAlert] = [
         description="Block lateral movement from compromised prod web host",
         sources=[
             ("siem", "Credential stuffing from prod-web-07 internal IP", 0.91),
-            ("edr",  "Mimikatz-like memory access pattern detected on prod-web-07", 0.85),
-            ("ndr",  "Anomalous SMB traffic to 14 internal hosts in 3 min", 0.80),
+            ("edr", "Mimikatz-like memory access pattern detected on prod-web-07", 0.85),
+            ("ndr", "Anomalous SMB traffic to 14 internal hosts in 3 min", 0.80),
         ],
     ),
     SecurityAlert(
@@ -163,7 +182,7 @@ SCENARIOS: list[SecurityAlert] = [
         description="Rotate compromised DB credentials on staging",
         sources=[
             ("secret-scanner", "Plaintext DB password found in git commit abc1234", 0.95),
-            ("audit-log",      "Credential accessed by unknown IP 203.0.113.50", 0.87),
+            ("audit-log", "Credential accessed by unknown IP 203.0.113.50", 0.87),
         ],
     ),
 ]

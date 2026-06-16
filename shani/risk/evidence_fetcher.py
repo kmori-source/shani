@@ -1,27 +1,27 @@
 """
 shani/risk/evidence_fetcher.py
 
-EvidenceFetcher — Pull 型エビデンス取得レイヤー。
+EvidenceFetcher — Pull-based evidence retrieval layer.
 
 Problem:
-    EvidenceItem.content はエージェントが直接書き込む Push 型。
-    エージェントは任意の内容を content に挿入できるため、
-    Shani 側では content の正確性を検証する手段がない。
+    EvidenceItem.content is Push-based, written directly by the agent.
+    Since agents can insert arbitrary content into content,
+    Shani has no means to verify the accuracy of content.
 
 Solution:
-    EvidenceItem.raw_reference が設定されている場合、
-    Shani 側が信頼済み SourceHandler を使ってコンテンツを取得し、
-    エージェント提供の content を上書きする（Pull 型）。
+    When EvidenceItem.raw_reference is set,
+    Shani retrieves the content using a trusted SourceHandler and
+    overwrites the agent-provided content (Pull-based).
 
-    取得失敗・未登録スキームの場合は、source を
-    "unverified_reference/{元ソース}" に変更し信頼度を降格する。
+    On fetch failure or unregistered scheme, the source is changed to
+    "unverified_reference/{original_source}" and the confidence is downgraded.
 
 Components:
-    FetchResult    — fetch 結果のコンテナ
-    SourceHandler  — 特定スキームを処理するハンドラのプロトコル
-    EvidenceStore  — Shani 側が事前登録したエビデンスの Key-Value ストア
-    StoreHandler   — "store://" スキームを処理する組み込みハンドラ
-    EvidenceFetcher — ハンドラを管理し EvidenceItem リストを解決するオーケストレータ
+    FetchResult    — container for fetch results
+    SourceHandler  — protocol for handlers that process specific schemes
+    EvidenceStore  — Key-Value store for evidence pre-registered by Shani
+    StoreHandler   — built-in handler for the "store://" scheme
+    EvidenceFetcher — orchestrator that manages handlers and resolves EvidenceItem lists
 """
 
 from __future__ import annotations
@@ -31,10 +31,10 @@ from typing import Protocol, runtime_checkable
 
 from ..schemas.decision import EvidenceItem
 
-# 未検証参照のソースプレフィックス（evidence.py の _SOURCE_TRUST_MAP に登録済み）
+# Source prefix for unverified references (registered in evidence.py's _SOURCE_TRUST_MAP)
 UNVERIFIED_PREFIX = "unverified_reference"
 
-# 未解決参照に適用する信頼度の上限
+# Confidence cap applied to unresolved references
 _UNRESOLVED_CONFIDENCE_CAP = 0.3
 
 
@@ -42,9 +42,11 @@ _UNRESOLVED_CONFIDENCE_CAP = 0.3
 # FetchResult
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class FetchResult:
-    """SourceHandler の fetch 結果。"""
+    """Result of a SourceHandler fetch."""
+
     success: bool
     content: str | None = None
     error: str | None = None
@@ -52,24 +54,25 @@ class FetchResult:
 
 
 # ---------------------------------------------------------------------------
-# SourceHandler プロトコル
+# SourceHandler protocol
 # ---------------------------------------------------------------------------
+
 
 @runtime_checkable
 class SourceHandler(Protocol):
-    """特定の raw_reference スキームを処理するハンドラのインターフェース。"""
+    """Interface for handlers that process specific raw_reference schemes."""
 
     @property
     def name(self) -> str:
-        """このハンドラの識別名。"""
+        """Identifying name of this handler."""
         ...
 
     def can_handle(self, reference: str) -> bool:
-        """このハンドラが reference を処理できるかを返す。"""
+        """Returns whether this handler can process the given reference."""
         ...
 
     def fetch(self, reference: str) -> FetchResult:
-        """reference からコンテンツを取得する。"""
+        """Retrieves content from the reference."""
         ...
 
 
@@ -77,13 +80,14 @@ class SourceHandler(Protocol):
 # EvidenceStore
 # ---------------------------------------------------------------------------
 
+
 class EvidenceStore:
     """
-    Shani 信頼済みエビデンスの Key-Value ストア。
+    Key-Value store for Shani trusted evidence.
 
-    信頼済みシステム側が事前登録したエビデンスを保持する。
-    エージェントは "store://<key>" 形式で参照できるが、
-    コンテンツの書き込みは Shani 側のみが行える。
+    Holds evidence pre-registered by the trusted system side.
+    Agents can reference entries via "store://<key>" format, but
+    only Shani can write content to the store.
     """
 
     _SCHEME = "store://"
@@ -92,7 +96,7 @@ class EvidenceStore:
         self._store: dict[str, str] = {}
 
     def register(self, key: str, content: str) -> None:
-        """信頼済みコンテンツをキーで登録する。"""
+        """Register trusted content under a key."""
         if not key:
             raise ValueError("key must not be empty")
         self._store[key] = content
@@ -108,11 +112,12 @@ class EvidenceStore:
 
 
 # ---------------------------------------------------------------------------
-# StoreHandler — "store://" スキームのハンドラ
+# StoreHandler — handler for the "store://" scheme
 # ---------------------------------------------------------------------------
 
+
 class StoreHandler:
-    """EvidenceStore の "store://<key>" 参照を処理するハンドラ。"""
+    """Handler for "store://<key>" references in EvidenceStore."""
 
     _SCHEME = "store://"
 
@@ -127,7 +132,7 @@ class StoreHandler:
         return reference.startswith(self._SCHEME)
 
     def fetch(self, reference: str) -> FetchResult:
-        key = reference[len(self._SCHEME):]
+        key = reference[len(self._SCHEME) :]
         content = self._store.get(key)
         if content is None:
             return FetchResult(
@@ -142,28 +147,29 @@ class StoreHandler:
 # EvidenceFetcher
 # ---------------------------------------------------------------------------
 
+
 class EvidenceFetcher:
     """
-    EvidenceItem リストを解決するオーケストレータ。
+    Orchestrator that resolves a list of EvidenceItems.
 
-    raw_reference が設定されている EvidenceItem を Pull 型に変換する。
-    登録済みハンドラで取得成功 → content を上書き。
-    取得失敗・未登録 → source を降格して信頼度を下げる。
-    raw_reference が未設定 → 変更なし（後方互換）。
+    Converts EvidenceItems with raw_reference set to Pull-based retrieval.
+    Fetch success via registered handler → overwrites content.
+    Fetch failure or unregistered → downgrades source and reduces confidence.
+    raw_reference not set → no change (backward compatible).
     """
 
     def __init__(self, handlers: list[SourceHandler] | None = None) -> None:
         self._handlers: list[SourceHandler] = list(handlers) if handlers else []
 
     def register_handler(self, handler: SourceHandler) -> None:
-        """SourceHandler を登録する。"""
+        """Register a SourceHandler."""
         self._handlers.append(handler)
 
     def resolve(self, evidence: list[EvidenceItem]) -> list[EvidenceItem]:
         """
-        EvidenceItem リストを解決して返す。
+        Resolves and returns the list of EvidenceItems.
 
-        raw_reference が設定されているアイテムのみ処理する。
+        Only processes items where raw_reference is set.
         """
         return [self._resolve_item(item) for item in evidence]
 
@@ -179,7 +185,7 @@ class EvidenceFetcher:
         if not result.success:
             return self._downgrade(item, result.error or "fetch failed")
 
-        # 取得成功 → content を信頼済みデータで上書き（Pull 型）
+        # Fetch success → overwrite content with trusted data (Pull-based)
         return EvidenceItem(
             source=item.source,
             content=result.content,  # type: ignore[arg-type]
@@ -195,10 +201,10 @@ class EvidenceFetcher:
 
     def _downgrade(self, item: EvidenceItem, reason: str) -> EvidenceItem:
         """
-        取得失敗時にエビデンスを降格する。
+        Downgrades evidence on fetch failure.
 
-        source を "unverified_reference/{元ソース}" に変更し、
-        信頼度を _UNRESOLVED_CONFIDENCE_CAP 以下に制限する。
+        Changes source to "unverified_reference/{original_source}" and
+        caps confidence to _UNRESOLVED_CONFIDENCE_CAP or below.
         """
         degraded_source = f"{UNVERIFIED_PREFIX}/{item.source}"
         current_confidence = item.confidence if item.confidence is not None else 0.5

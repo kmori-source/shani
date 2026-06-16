@@ -34,9 +34,9 @@ class PostureSimulation:
 
     def run(
         self,
-        candidate_posture:     UserPosture,
-        historical_proposals:  list[DecisionProposal],
-        current_posture:       UserPosture | None = None,
+        candidate_posture: UserPosture,
+        historical_proposals: list[DecisionProposal],
+        current_posture: UserPosture | None = None,
     ) -> PostureSimulationResult:
         """
         Evaluate all historical_proposals under candidate_posture.
@@ -46,15 +46,15 @@ class PostureSimulation:
         """
         engine = PostureEngine(candidate_posture)
 
-        pass_list:      list[dict[str, Any]] = []
-        reject_list:    list[dict[str, Any]] = []
+        pass_list: list[dict[str, Any]] = []
+        reject_list: list[dict[str, Any]] = []
         ambiguous_list: list[dict[str, Any]] = []
 
         for prop in historical_proposals:
             outcome, _ = engine.evaluate(prop)
             record: dict[str, Any] = {
-                "decision_id":  prop.decision_id,
-                "target":       prop.target,
+                "decision_id": prop.decision_id,
+                "target": prop.target,
                 "blast_radius": prop.blast_radius.value,
                 "reversibility": prop.reversibility,
                 "evidence_count": len(prop.evidence),
@@ -70,13 +70,14 @@ class PostureSimulation:
         if current_posture is not None:
             current_engine = PostureEngine(current_posture)
             current_reject = sum(
-                1 for p in historical_proposals
+                1
+                for p in historical_proposals
                 if current_engine.evaluate(p)[0] == PostureOutcome.REJECT
             )
             delta = {
-                "new_reject_count":     len(reject_list),
+                "new_reject_count": len(reject_list),
                 "current_reject_count": current_reject,
-                "delta":                len(reject_list) - current_reject,
+                "delta": len(reject_list) - current_reject,
             }
 
         return PostureSimulationResult(

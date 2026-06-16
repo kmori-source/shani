@@ -3,20 +3,21 @@ shani/adapters/nanoclaw/sidecar.py
 
 ShaniSidecarServer / ShaniSidecarClient
 
-サイドカーパターン（Pattern 1: Pod内サイドカー）:
-  nanoclaw コンテナ ─localhost HTTP─> Shani コンテナ（同一 Pod）
+Sidecar pattern (Pattern 1: In-Pod sidecar):
+  nanoclaw container ─localhost HTTP─> Shani container (same Pod)
 
-サーバーは SHANI_HOST（デフォルト 0.0.0.0）/ SHANI_PORT（デフォルト 8765）で
-バインドアドレスを制御する。Pod 内では localhost で到達できる。
+The server controls its bind address via SHANI_HOST (default 0.0.0.0) /
+SHANI_PORT (default 8765). Reachable via localhost within the Pod.
 
-エンドポイント:
+Endpoints:
   POST /v1/evaluate          DecisionProposal → ADO or DeniedDecision
-  POST /v1/verify_binding    ADO バインディング検証
-  POST /v1/register_executed 実行完了通知
-  GET  /healthz              ヘルスチェック
+  POST /v1/verify_binding    ADO binding verification
+  POST /v1/register_executed execution completion notification
+  GET  /healthz              health check
 
-依存追加なし（stdlib の http.server + urllib のみ）。
+No additional dependencies (stdlib http.server + urllib only).
 """
+
 from __future__ import annotations
 
 import json
@@ -44,19 +45,19 @@ _DEFAULT_PORT = 8765
 
 class ShaniSidecarServer:
     """
-    nanoclaw サイドカー用 HTTP サーバー。
+    HTTP server for the nanoclaw sidecar.
 
-    Shani ガバナンスエンジンを HTTP サービスとして公開する。
-    Pod内サイドカーとして動作するため、デフォルトで 0.0.0.0 にバインドする。
+    Exposes the Shani governance engine as an HTTP service.
+    Binds to 0.0.0.0 by default since it operates as an in-Pod sidecar.
 
-    Usage (サイドカーコンテナ内で実行):
+    Usage (run inside sidecar container):
         from shani.adapters.nanoclaw.sidecar import ShaniSidecarServer
         server = ShaniSidecarServer(gate=hitl_gate)
         server.serve_forever()   # blocks
 
-    環境変数:
-        SHANI_HOST  バインドアドレス（デフォルト: 0.0.0.0）
-        SHANI_PORT  ポート番号（デフォルト: 8765）
+    Environment variables:
+        SHANI_HOST  bind address (default: 0.0.0.0)
+        SHANI_PORT  port number (default: 8765)
     """
 
     def __init__(
@@ -67,7 +68,9 @@ class ShaniSidecarServer:
     ) -> None:
         self._gate = gate
         self._host = host if host is not None else os.environ.get("SHANI_HOST", _DEFAULT_HOST)
-        self._port = port if port is not None else int(os.environ.get("SHANI_PORT", str(_DEFAULT_PORT)))
+        self._port = (
+            port if port is not None else int(os.environ.get("SHANI_PORT", str(_DEFAULT_PORT)))
+        )
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -80,7 +83,7 @@ class ShaniSidecarServer:
         return self._port
 
     def serve_forever(self) -> None:
-        """HTTP サーバーを起動してブロックする。"""
+        """Start the HTTP server and block."""
         gate = self._gate
 
         class _Handler(BaseHTTPRequestHandler):
@@ -124,16 +127,20 @@ class ShaniSidecarServer:
                 proposal = DecisionProposal.model_validate(data)
                 result = gate.evaluate(proposal)
                 if isinstance(result, DeniedDecision):
-                    self._send_json({
-                        "type": "denied",
-                        "decision_id": result.decision_id,
-                        "reason": result.reason,
-                    })
+                    self._send_json(
+                        {
+                            "type": "denied",
+                            "decision_id": result.decision_id,
+                            "reason": result.reason,
+                        }
+                    )
                 else:
-                    self._send_json({
-                        "type": "ado",
-                        "data": result.model_dump(mode="json"),
-                    })
+                    self._send_json(
+                        {
+                            "type": "ado",
+                            "data": result.model_dump(mode="json"),
+                        }
+                    )
 
             def _handle_verify_binding(self):
                 data = self._read_json()
@@ -164,12 +171,12 @@ class ShaniSidecarServer:
         self._server.serve_forever()
 
     def start(self) -> None:
-        """バックグラウンドスレッドでサーバーを起動する（テスト・非同期用）。"""
+        """Start the server in a background thread (for testing / async use)."""
         self._thread = threading.Thread(target=self.serve_forever, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
-        """サーバーを停止する。"""
+        """Stop the server."""
         if self._server:
             self._server.shutdown()
             self._server = None
@@ -182,21 +189,21 @@ class ShaniSidecarServer:
 
 class ShaniSidecarClient:
     """
-    nanoclaw 側で使う HTTP クライアント。GovernanceGate インターフェースを実装する。
+    HTTP client for use on the nanoclaw side. Implements the GovernanceGate interface.
 
-    patch_nanoclaw_agent(gate=client) に渡すことで、
-    全ツール呼び出しが HTTP 経由でサイドカーに転送される。
+    Pass to patch_nanoclaw_agent(gate=client) so that all tool calls are
+    forwarded to the sidecar over HTTP.
 
-    Usage (nanoclaw コンテナ内で実行):
+    Usage (run inside nanoclaw container):
         from shani.adapters.nanoclaw.sidecar import ShaniSidecarClient
         from shani.adapters.nanoclaw import patch_nanoclaw_agent
 
-        client = ShaniSidecarClient()   # SHANI_HOST / SHANI_PORT を参照
+        client = ShaniSidecarClient()   # reads SHANI_HOST / SHANI_PORT 
         patch_nanoclaw_agent(agent=agent, gate=client, proposed_by="agent/v1")
 
-    環境変数:
-        SHANI_HOST  サイドカーのホスト（Pod内では localhost、デフォルト: localhost）
-        SHANI_PORT  サイドカーのポート（デフォルト: 8765）
+    Environment variables:
+        SHANI_HOST  sidecar host (localhost within the Pod, default: localhost)
+        SHANI_PORT  sidecar port (default: 8765)
     """
 
     def __init__(
@@ -225,7 +232,7 @@ class ShaniSidecarClient:
             raise RuntimeError(f"Sidecar unreachable [{path}]: {exc}") from exc
 
     def evaluate(self, proposal: DecisionProposal):
-        """DecisionProposal をサーバーに送り、ADO または DeniedDecision を返す。"""
+        """Send a DecisionProposal to the server and return an ADO or DeniedDecision."""
         resp = self._post("/v1/evaluate", proposal.model_dump(mode="json"))
         if resp["type"] == "denied":
             return DeniedDecision(
@@ -235,7 +242,7 @@ class ShaniSidecarClient:
         return AuthorizedDecisionObject.model_validate(resp["data"])
 
     def verify_binding(self, ado: AuthorizedDecisionObject, proposal=None) -> bool:
-        """ADO のバインディング検証をサーバーに委譲する（署名キーはサーバー側にある）。"""
+        """Delegates ADO binding verification to the server (signing key is on the server side)."""
         payload: dict = {"ado": ado.model_dump(mode="json")}
         if proposal is not None:
             payload["proposal"] = proposal.model_dump(mode="json")
@@ -243,7 +250,7 @@ class ShaniSidecarClient:
         return bool(resp.get("ok", False))
 
     def register_executed(self, ado_or_id, agent_id: str = "") -> None:
-        """実行完了をサーバーに通知し、nonce を消費させる。
+        """Notifies the server of execution completion and consumes the nonce.
 
         ado_or_id must be a full AuthorizedDecisionObject — passing a string
         decision_id is non-conformant with SPEC §5.4 (bypasses nonce consumption
@@ -255,13 +262,16 @@ class ShaniSidecarClient:
                 "Passing a decision_id string is non-conformant with SPEC §5.4 — it bypasses "
                 "nonce consumption and replay prevention. Pass the full ADO object instead."
             )
-        self._post("/v1/register_executed", {
-            "ado": ado_or_id.model_dump(mode="json"),
-            "agent_id": agent_id,
-        })
+        self._post(
+            "/v1/register_executed",
+            {
+                "ado": ado_or_id.model_dump(mode="json"),
+                "agent_id": agent_id,
+            },
+        )
 
     def healthz(self) -> bool:
-        """サーバーの起動確認。"""
+        """Check that the server is up."""
         url = f"{self._base_url}/healthz"
         req = _urllib_request.Request(url, method="GET")
         try:

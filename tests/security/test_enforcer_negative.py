@@ -3,8 +3,8 @@ tests/security/test_enforcer_negative.py
 
 Enforcer Negative Tests — verify that invalid ADOs are correctly blocked.
 
-PR review feedback: "「不正な署名を持つADOをエージェントが提示した際、
-Enforcerが正しくブロックするか」というネガティブテスト"
+PR review feedback: "Negative tests verifying that when an agent presents an ADO
+with an invalid signature, the Enforcer correctly blocks it"
 
 Tests:
     ① verify_binding() returns False for ADO with tampered signature
@@ -16,6 +16,7 @@ Tests:
     ⑦ issue_capability() raises for expired ADO (caught in verify_binding)
     ⑧ Pipeline fail-safe: evaluate() returns DeniedDecision when pipeline raises
 """
+
 from __future__ import annotations
 
 import os
@@ -28,6 +29,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -40,6 +42,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, DeniedDecision, StaticAuthorityProvider, DecisionType, BlastRadius
@@ -75,6 +78,7 @@ def past(seconds: int = 1) -> datetime:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_evaluator():
     agents = {
@@ -112,6 +116,7 @@ def make_proposal(**kwargs):
 # ① Tampered signature → verify_binding returns False
 # ---------------------------------------------------------------------------
 
+
 def test_tampered_signature_blocked():
     section("① Tampered signature → verify_binding() = False")
 
@@ -139,6 +144,7 @@ def test_tampered_signature_blocked():
 # ② Tampered decision_id → verify_binding returns False
 # ---------------------------------------------------------------------------
 
+
 def test_tampered_decision_id_blocked():
     section("② Tampered decision_id → verify_binding() = False")
 
@@ -162,6 +168,7 @@ def test_tampered_decision_id_blocked():
 # ③ Tampered authorized_dsal (escalation attack) → verify_binding returns False
 # ---------------------------------------------------------------------------
 
+
 def test_tampered_dsal_escalation_blocked():
     section("③ D-SAL escalation attack → verify_binding() = False")
 
@@ -177,14 +184,19 @@ def test_tampered_dsal_escalation_blocked():
     escalated = ado.model_copy(update={"authorized_dsal": min(4, original_dsal + 2)})
     result = ev.verify_binding(escalated, proposal)
     if result:
-        fail(f"SECURITY GAP: D-SAL escalation ({original_dsal}→{escalated.authorized_dsal}) passed verify_binding()")
+        fail(
+            f"SECURITY GAP: D-SAL escalation ({original_dsal}→{escalated.authorized_dsal}) passed verify_binding()"
+        )
     else:
-        ok(f"D-SAL escalation ({original_dsal}→{escalated.authorized_dsal}) → verify_binding() = False ✓")
+        ok(
+            f"D-SAL escalation ({original_dsal}→{escalated.authorized_dsal}) → verify_binding() = False ✓"
+        )
 
 
 # ---------------------------------------------------------------------------
 # ④ Tampered authority → verify_binding returns False
 # ---------------------------------------------------------------------------
+
 
 def test_tampered_authority_blocked():
     section("④ Tampered authority → verify_binding() = False")
@@ -208,6 +220,7 @@ def test_tampered_authority_blocked():
 # ---------------------------------------------------------------------------
 # ⑤ Expired ADO → verify_binding returns False
 # ---------------------------------------------------------------------------
+
 
 def test_expired_ado_blocked_by_verify_binding():
     section("⑤ Expired ADO → verify_binding() = False")
@@ -256,6 +269,7 @@ def test_expired_ado_blocked_by_verify_binding():
 # ⑥ issue_capability() raises CapabilityError for invalid signature
 # ---------------------------------------------------------------------------
 
+
 def test_issue_capability_blocks_invalid_signature():
     section("⑥ issue_capability() raises CapabilityError for invalid signature")
 
@@ -289,6 +303,7 @@ def test_issue_capability_blocks_invalid_signature():
 # ---------------------------------------------------------------------------
 # ⑦ issue_capability() raises for expired ADO
 # ---------------------------------------------------------------------------
+
 
 def test_issue_capability_blocks_expired_ado():
     section("⑦ issue_capability() raises for expired ADO")
@@ -334,6 +349,7 @@ def test_issue_capability_blocks_expired_ado():
 # ---------------------------------------------------------------------------
 # ⑧ Pipeline fail-safe: evaluate() returns DeniedDecision when pipeline raises
 # ---------------------------------------------------------------------------
+
 
 def test_pipeline_failure_triggers_fail_safe():
     section("⑧ Pipeline failure → evaluate() returns DeniedDecision (fail-safe)")

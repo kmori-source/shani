@@ -15,6 +15,7 @@ Requirements (all pure Python or widely available):
     cryptography  (pip install cryptography)  — optional, for Ed25519
     pydantic      (pip install "pydantic>=2.5") — optional, shim used if absent
 """
+
 from __future__ import annotations
 
 import os
@@ -33,14 +34,15 @@ try:
 except ImportError:
     import importlib.util
     import pathlib
+
     _compat_path = pathlib.Path(_ROOT) / "shani" / "_compat.py"
     _spec = importlib.util.spec_from_file_location("_compat", _compat_path)
     _compat = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_compat)
 
     _shim = types.ModuleType("pydantic")
-    _shim.BaseModel       = _compat.BaseModel
-    _shim.Field           = _compat.Field
+    _shim.BaseModel = _compat.BaseModel
+    _shim.Field = _compat.Field
     _shim.field_validator = _compat.field_validator
     _shim.model_validator = _compat.model_validator
     sys.modules["pydantic"] = _shim
@@ -51,7 +53,7 @@ sys.path.insert(0, _ROOT)
 
 
 def header(t):
-    print(f"\n{'═'*60}\n  {t}\n{'═'*60}")
+    print(f"\n{'═' * 60}\n  {t}\n{'═' * 60}")
 
 
 def run_file(path: str) -> bool:
@@ -61,17 +63,25 @@ def run_file(path: str) -> bool:
 def cmd_check():
     header("Quick End-to-End Check")
     from datetime import datetime, timedelta, timezone
-    from shani import ShaniEvaluator, StaticAuthorityProvider, DecisionType, BlastRadius, DeniedDecision
+    from shani import (
+        ShaniEvaluator,
+        StaticAuthorityProvider,
+        DecisionType,
+        BlastRadius,
+        DeniedDecision,
+    )
     from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
     from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
 
-    policy = DecisionPolicyProvider(agent_registry={
-        "test-agent/v1": AgentIdentity(
-            agent_id="test-agent/v1",
-            granted_dsal=2,
-            allowed_decision_types=frozenset(["remediation"]),
-        )
-    })
+    policy = DecisionPolicyProvider(
+        agent_registry={
+            "test-agent/v1": AgentIdentity(
+                agent_id="test-agent/v1",
+                granted_dsal=2,
+                allowed_decision_types=frozenset(["remediation"]),
+            )
+        }
+    )
     evaluator = ShaniEvaluator(
         authority_provider=StaticAuthorityProvider(max_dsal=3),
         decision_policy=policy,
@@ -92,7 +102,8 @@ def cmd_check():
 
     result = evaluator.evaluate(proposal)
     if isinstance(result, DeniedDecision):
-        print(f"  ✗ Unexpected denial: {result.reason}"); return False
+        print(f"  ✗ Unexpected denial: {result.reason}")
+        return False
 
     ado = result
     print(f"  ✓ ADO issued")
@@ -106,7 +117,7 @@ def cmd_check():
     print(f"    signature      : {ado.signature[:16]}…")
     print(f"    exec_context.target: {ado.exec_context.intent_binding.target}")
 
-    assert evaluator.verify_binding(ado, proposal),   "verify_binding failed"
+    assert evaluator.verify_binding(ado, proposal), "verify_binding failed"
     print(f"  ✓ verify_binding: OK")
 
     evaluator.register_executed(ado, "test-agent/v1")
@@ -124,28 +135,36 @@ def cmd_tests():
     base = _ROOT
     suites = [
         # Unit tests
-        ("Evaluator v0.3 (happy path, denials, DenialContext, no requested_dsal)",
-         "tests/unit/test_evaluator.py"),
-        ("Crypto + DIS integrity (signatures, state machine)",
-         "tests/unit/test_crypto_integrity.py"),
+        (
+            "Evaluator v0.3 (happy path, denials, DenialContext, no requested_dsal)",
+            "tests/unit/test_evaluator.py",
+        ),
+        (
+            "Crypto + DIS integrity (signatures, state machine)",
+            "tests/unit/test_crypto_integrity.py",
+        ),
         # Security tests
-        ("Signature coverage (19 field mutations)",
-         "tests/security/test_signature_coverage.py"),
-        ("Security fixes (proposal_hash / replay / delegation)",
-         "tests/security/test_security_fixes.py"),
-        ("ADO v5 schema (naming, max_children, ExecContext)",
-         "tests/security/test_ado_v5_schema.py"),
-        ("D-SAL calculator (context-driven modifiers)",
-         "tests/security/test_dsal_calculator.py"),
-        ("Risk pipeline (4-component evaluation)",
-         "tests/security/test_risk_pipeline.py"),
-        ("OSS clarity (DenialContext propagation)",
-         "tests/security/test_oss_clarity.py"),
-        ("Policy as Code (capability_matrix, env_rules, authority roles)",
-         "tests/security/test_policy_as_code.py"),
+        ("Signature coverage (19 field mutations)", "tests/security/test_signature_coverage.py"),
+        (
+            "Security fixes (proposal_hash / replay / delegation)",
+            "tests/security/test_security_fixes.py",
+        ),
+        (
+            "ADO v5 schema (naming, max_children, ExecContext)",
+            "tests/security/test_ado_v5_schema.py",
+        ),
+        ("D-SAL calculator (context-driven modifiers)", "tests/security/test_dsal_calculator.py"),
+        ("Risk pipeline (4-component evaluation)", "tests/security/test_risk_pipeline.py"),
+        ("OSS clarity (DenialContext propagation)", "tests/security/test_oss_clarity.py"),
+        (
+            "Policy as Code (capability_matrix, env_rules, authority roles)",
+            "tests/security/test_policy_as_code.py",
+        ),
         # Chrome extension adapter
-        ("Chrome Adapter (browser_action, HITL, token lifecycle)",
-         "tests/unit/test_chrome_adapter.py"),
+        (
+            "Chrome Adapter (browser_action, HITL, token lifecycle)",
+            "tests/unit/test_chrome_adapter.py",
+        ),
     ]
     all_ok = True
     for label, rel in suites:
@@ -164,6 +183,7 @@ def cmd_demo(auto=True):
         os.environ["SHANI_HITL_AUTO"] = "approve"
     import importlib.util
     import pathlib as _pl
+
     _s = importlib.util.spec_from_file_location(
         "hitl_scenario",
         str(_pl.Path(_ROOT) / "examples/hitl_approval/scenario.py"),

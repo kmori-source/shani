@@ -6,6 +6,7 @@ Posture factory for the Shani test suites.
 Provides:
   - make_user_posture(): UserPosture factory with sensible conformance defaults
 """
+
 from __future__ import annotations
 
 import os
@@ -18,6 +19,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -30,6 +32,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import UserPosture, PostureConstraints

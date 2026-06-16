@@ -61,10 +61,11 @@ class OrgPolicyAbsoluteConstraints:
     Cannot be overridden by individual principals.
     Enforced at UserPosture registration and at PostureEngine evaluation.
     """
-    max_blast_radius:    str  = "critical"   # no UserPosture may exceed this
-    cross_org_min_dsal:  int  = 4            # minimum D-SAL for cross-org transitions
-    prod_reversibility:  bool = False        # if True, irreversible ops on prod are always denied
-    prod_target_pattern: str  = r"prod.*"    # regex pattern identifying production targets
+
+    max_blast_radius: str = "critical"  # no UserPosture may exceed this
+    cross_org_min_dsal: int = 4  # minimum D-SAL for cross-org transitions
+    prod_reversibility: bool = False  # if True, irreversible ops on prod are always denied
+    prod_target_pattern: str = r"prod.*"  # regex pattern identifying production targets
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class OrgPolicy:
     Contains absolute_constraints that form the ceiling of all UserPostures
     in the organization (SPEC §8.3).
     """
+
     absolute_constraints: OrgPolicyAbsoluteConstraints = field(
         default_factory=OrgPolicyAbsoluteConstraints
     )
@@ -86,15 +88,15 @@ class OrgPolicy:
 
 # Mirrors policy/decision_policy.yaml — keep in sync
 DEFAULT_DECISION_POLICY: dict[str, int] = {
-    DecisionType.REMEDIATION.value:          1,
+    DecisionType.REMEDIATION.value: 1,
     DecisionType.CONFIGURATION_CHANGE.value: 2,
-    DecisionType.DATA_ACCESS.value:          1,  # Read-only: minimal oversight
-    DecisionType.NETWORK_ACTION.value:       2,
-    DecisionType.DELEGATION.value:           3,
-    DecisionType.POLICY_UPDATE.value:        4,
-    DecisionType.BROWSER_ACTION.value:       2,  # Browser automation: supervised
-    DecisionType.AGENT_TASK.value:           1,  # nanoclaw agent tools: bounded
-    DecisionType.TOOL_CALL.value:            1,  # cowork/Claude API: bounded
+    DecisionType.DATA_ACCESS.value: 1,  # Read-only: minimal oversight
+    DecisionType.NETWORK_ACTION.value: 2,
+    DecisionType.DELEGATION.value: 3,
+    DecisionType.POLICY_UPDATE.value: 4,
+    DecisionType.BROWSER_ACTION.value: 2,  # Browser automation: supervised
+    DecisionType.AGENT_TASK.value: 1,  # nanoclaw agent tools: bounded
+    DecisionType.TOOL_CALL.value: 1,  # cowork/Claude API: bounded
 }
 
 
@@ -114,12 +116,13 @@ class AgentIdentity:
     declaration document (SPEC §8.7). When present, it contains the
     principal's UserPosture and history.
     """
-    agent_id:               str
-    granted_dsal:           int                           # Ceiling of what this agent may do
-    public_key_b64:         str | None = None             # Ed25519 public key for identity binding
+
+    agent_id: str
+    granted_dsal: int  # Ceiling of what this agent may do
+    public_key_b64: str | None = None  # Ed25519 public key for identity binding
     allowed_decision_types: frozenset[str] = field(default_factory=frozenset)
-    metadata:               dict[str, Any] = field(default_factory=dict)
-    binding:                UserPosture | None = None     # v0.4: signed declaration (optional)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    binding: UserPosture | None = None  # v0.4: signed declaration (optional)
 
 
 # ---------------------------------------------------------------------------
@@ -134,26 +137,27 @@ class CapabilityMatrix:
     ExecutionBoundary only reads from here。
     no hardcoded permission mappings exist in the code。
     """
+
     # Mirrors policy/decision_policy.yaml capability_matrix — keep in sync
     _FALLBACK: dict[str, set[str]] = {
-        "data_access":          {"http_get", "read_file"},
+        "data_access": {"http_get", "read_file"},
         "configuration_change": {"http_post", "http_put", "write_file"},
-        "remediation":          {"run_command", "http_post", "write_file"},
-        "network_action":       {"http_get", "http_post", "http_put"},
-        "delegation":           {"http_post"},
-        "policy_update":        {"http_post", "http_put", "write_file"},
-        "browser_action":       {"http_get", "http_post"},
-        "agent_task":           {"http_get", "http_post", "read_file", "run_command"},
-        "tool_call":            {"http_get", "http_post", "read_file", "run_command"},
+        "remediation": {"run_command", "http_post", "write_file"},
+        "network_action": {"http_get", "http_post", "http_put"},
+        "delegation": {"http_post"},
+        "policy_update": {"http_post", "http_put", "write_file"},
+        "browser_action": {"http_get", "http_post"},
+        "agent_task": {"http_get", "http_post", "read_file", "run_command"},
+        "tool_call": {"http_get", "http_post", "read_file", "run_command"},
     }
 
     def __init__(self, matrix_data: "dict | None" = None):
         import logging
+
         self._log = logging.getLogger("shani.authority.capability_matrix")
         if matrix_data:
             self._matrix: dict[str, set[str]] = {
-                dt: set(entry.get("operations", []))
-                for dt, entry in matrix_data.items()
+                dt: set(entry.get("operations", [])) for dt, entry in matrix_data.items()
             }
         else:
             self._matrix = {k: set(v) for k, v in self._FALLBACK.items()}
@@ -162,8 +166,7 @@ class CapabilityMatrix:
         ops = self._matrix.get(decision_type)
         if ops is None:
             self._log.warning(
-                "No capability_matrix entry for '%s' — denying. "
-                "Add to policy.yaml.", decision_type
+                "No capability_matrix entry for '%s' — denying. Add to policy.yaml.", decision_type
             )
             return set()
         return set(ops)
@@ -186,13 +189,13 @@ class DecisionPolicyProvider:
 
     def __init__(
         self,
-        decision_policy:           dict[str, int] | None = None,
-        agent_registry:            dict[str, AgentIdentity] | None = None,
+        decision_policy: dict[str, int] | None = None,
+        agent_registry: dict[str, AgentIdentity] | None = None,
         allow_unregistered_agents: bool = False,
-        capability_matrix:         "CapabilityMatrix | None" = None,
-        environment_rules:         "dict | None" = None,
-        org_policy:                OrgPolicy | None = None,
-        kill_switch_enabled:       bool = False,
+        capability_matrix: "CapabilityMatrix | None" = None,
+        environment_rules: "dict | None" = None,
+        org_policy: OrgPolicy | None = None,
+        kill_switch_enabled: bool = False,
     ) -> None:
         self._policy = decision_policy or DEFAULT_DECISION_POLICY.copy()
         self._agents = agent_registry or {}
@@ -211,6 +214,7 @@ class DecisionPolicyProvider:
 
         with p.open() as f:
             import yaml
+
             data: dict[str, Any] = yaml.safe_load(f)
 
         # Parse decision policy
@@ -255,11 +259,14 @@ class DecisionPolicyProvider:
                 pub_key: bytes | None = None
                 if identity.public_key_b64 is not None:
                     import base64 as _b64
+
                     try:
                         pub_key = _b64.b64decode(identity.public_key_b64)
                     except Exception:
                         pass
-                ok, reason = provider.validate_user_posture(identity.binding, public_key_bytes=pub_key)
+                ok, reason = provider.validate_user_posture(
+                    identity.binding, public_key_bytes=pub_key
+                )
                 if not ok:
                     raise ValueError(
                         f"agent_registry['{agent_id}'].binding violates "
@@ -287,11 +294,13 @@ class DecisionPolicyProvider:
             signed_at = h.get("signed_at")
             if isinstance(signed_at, str):
                 signed_at = datetime.fromisoformat(signed_at)
-            history_entries.append(PostureHistoryEntry(
-                version=str(h.get("version", "")),
-                signed_at=signed_at,
-                note=str(h.get("note", "")),
-            ))
+            history_entries.append(
+                PostureHistoryEntry(
+                    version=str(h.get("version", "")),
+                    signed_at=signed_at,
+                    note=str(h.get("note", "")),
+                )
+            )
         history_tuple = tuple(history_entries)
 
         signed_at = binding_data.get("signed_at")
@@ -363,6 +372,7 @@ class DecisionPolicyProvider:
           is supplied (SPEC §8.2)
         """
         import logging as _logging
+
         _log = _logging.getLogger("shani.authority.policy")
 
         ac = self._org_policy.absolute_constraints
@@ -390,7 +400,7 @@ class DecisionPolicyProvider:
 
         # max_blast_radius must not exceed org ceiling
         posture_br = posture.constraints.max_blast_radius.lower()
-        org_br     = ac.max_blast_radius.lower()
+        org_br = ac.max_blast_radius.lower()
         if posture_br not in _blast_order or org_br not in _blast_order:
             return False, f"Unknown blast_radius value: {posture_br!r} or {org_br!r}"
         if _blast_order.index(posture_br) > _blast_order.index(org_br):

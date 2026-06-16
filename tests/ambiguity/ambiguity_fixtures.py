@@ -6,6 +6,7 @@ Shared factories for the ambiguity test suite.
 Tests cover T15 (Ambiguity Escalation) and related boundary conditions.
 All factories accept keyword overrides for targeted field variation.
 """
+
 from __future__ import annotations
 
 import os
@@ -33,6 +34,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import (
@@ -92,10 +94,15 @@ AMBIGUITY_AGENTS: dict[str, AgentIdentity] = {
     "agent/high": AgentIdentity(
         agent_id="agent/high",
         granted_dsal=4,
-        allowed_decision_types=frozenset([
-            "remediation", "data_access", "configuration_change",
-            "policy_update", "network_action",
-        ]),
+        allowed_decision_types=frozenset(
+            [
+                "remediation",
+                "data_access",
+                "configuration_change",
+                "policy_update",
+                "network_action",
+            ]
+        ),
     ),
 }
 

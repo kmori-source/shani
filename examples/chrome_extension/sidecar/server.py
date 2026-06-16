@@ -1,38 +1,38 @@
 """
 examples/chrome_extension/sidecar/server.py
 
-Shani Chrome Extension Sidecar — Chrome拡張機能からの承認リクエストを処理する
-ローカル HTTP サーバー。
+Shani Chrome Extension Sidecar — a local HTTP server that handles approval
+requests from the Chrome extension.
 
 Flow:
     Chrome Extension (background.js)
         ↓ POST /approve
     Sidecar
         ├─ ChromeAdapter.handle_message()
-        ├─ gate.evaluate()  ← Shani評価エンジン
-        │     ├─ D-SAL計算
-        │     ├─ リスク評価
-        │     └─ HITL (D-SAL >= 2 の場合、人間の承認を待機)
-        └─ ADO → Capability → token 返却
+        ├─ gate.evaluate()  ← Shani evaluation engine
+        │     ├─ D-SAL calculation
+        │     ├─ Risk assessment
+        │     └─ HITL (waits for human approval if D-SAL >= 2)
+        └─ ADO → Capability → token returned
         ↓ {"token": "...", "allowed_ops": [...]}  or  {"request_id": "...", "status": "pending"}
     Chrome Extension
         ↓ POST /execute (token + operation + target)
     Sidecar
         ├─ ChromeAdapter.execute()
-        └─ 結果を返す
-        ↓ popup.js が GET /pending でポーリング
+        └─ Returns result
+        ↓ popup.js polls GET /pending
     Popup UI
         ↓ POST /decision (approve/deny)
     Sidecar
         └─ channel.approve() / channel.deny()
 
 Endpoints:
-    POST /approve       承認申請 → token or request_id
-    POST /execute       token + operation → 実行結果
-    POST /collect       pending な request_id の結果をポーリング
-    GET  /pending       HITL 待機中の承認一覧（popup.js が使用）
-    POST /decision      承認 or 拒否（popup.js が使用）
-    GET  /health        ヘルスチェック
+    POST /approve       Approval request → token or request_id
+    POST /execute       token + operation → execution result
+    POST /collect       Poll for pending request_id result
+    GET  /pending       List of HITL pending approvals (used by popup.js)
+    POST /decision      Approve or deny (used by popup.js)
+    GET  /health        Health check
 
 Launch:
     python server.py
@@ -55,6 +55,7 @@ except ImportError:
     import types as _t
     import importlib.util as _iu
     import pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -67,6 +68,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning, module="shani")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider, DeniedDecision  # noqa: E402
@@ -78,8 +80,9 @@ from shani.adapters.chrome import ChromeAdapter  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sidecar 初期化
+# Sidecar initialization
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_sidecar(hitl_dsal: int = 2) -> ChromeAdapter:
     channel = CallbackApprovalChannel()
@@ -88,10 +91,12 @@ def build_sidecar(hitl_dsal: int = 2) -> ChromeAdapter:
         "chrome-extension/v1": AgentIdentity(
             agent_id="chrome-extension/v1",
             granted_dsal=2,
-            allowed_decision_types=frozenset([
-                DecisionType.BROWSER_ACTION.value,
-                DecisionType.DATA_ACCESS.value,
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    DecisionType.BROWSER_ACTION.value,
+                    DecisionType.DATA_ACCESS.value,
+                ]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -146,23 +151,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"ok": True, "service": "shani-chrome-sidecar"})
 
         elif self.path == "/pending":
-            # popup.js がポーリングして未決承認一覧を取得する
+            # popup.js polls to get the list of pending approvals
             channel = adapter._gate._channel
             pending = []
             for req in channel.get_pending():
                 d = req.to_display_dict()
-                pending.append({
-                    "request_id": req.request_id,
-                    "action": d.get("action", ""),
-                    "target": req.target,
-                    "intent": req.intent,
-                    "blast_radius": d.get("blast_radius", ""),
-                    "dsal": d.get("dsal_requested", 0),
-                    "required_authority": req.required_authority,
-                    "timeout_at": req.timeout_at.isoformat(),
-                    "evidence": req.evidence_summary,
-                    "proposed_by": req.proposed_by,
-                })
+                pending.append(
+                    {
+                        "request_id": req.request_id,
+                        "action": d.get("action", ""),
+                        "target": req.target,
+                        "intent": req.intent,
+                        "blast_radius": d.get("blast_radius", ""),
+                        "dsal": d.get("dsal_requested", 0),
+                        "required_authority": req.required_authority,
+                        "timeout_at": req.timeout_at.isoformat(),
+                        "evidence": req.evidence_summary,
+                        "proposed_by": req.proposed_by,
+                    }
+                )
             self._send({"pending": pending})
 
         else:
@@ -172,10 +179,10 @@ class Handler(BaseHTTPRequestHandler):
         body = self._read_body()
 
         if self.path == "/approve":
-            # Chrome拡張からのアクション承認申請
+            # Action approval request from Chrome extension
             result = adapter.handle_message(body)
             if result.get("approved") is None:
-                # HITL待機中
+                # Waiting for HITL
                 self._send(result, 202)
             elif result.get("approved"):
                 self._send(result, 200)
@@ -185,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(result, 403)
 
         elif self.path == "/collect":
-            # HITL結果のポーリング
+            # Poll for HITL result
             request_id = body.get("request_id")
             if not request_id:
                 self._send({"error": "request_id required"}, 400)
@@ -194,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(result)
 
         elif self.path == "/execute":
-            # 承認済みトークンでアクション実行
+            # Execute action with approved token
             token = body.get("token")
             operation = body.get("operation", "http_get")
             target = body.get("target", "")
@@ -207,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(result, status)
 
         elif self.path == "/decision":
-            # popup.js からの承認/拒否
+            # Approve or deny from popup.js
             request_id = body.get("request_id")
             action = body.get("action")  # "approve" or "deny"
             authority = body.get("authority", "popup-user")
@@ -231,8 +238,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# エントリーポイント
+# Entry point
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def run(port: int = 7891, hitl_dsal: int = 2):
     global adapter
@@ -243,21 +251,23 @@ def run(port: int = 7891, hitl_dsal: int = 2):
     print(f"HITL required at D-SAL >= {hitl_dsal}")
     print()
     print("Endpoints:")
-    print(f"  POST /approve   — ブラウザアクション承認申請")
-    print(f"  POST /execute   — token でアクション実行")
-    print(f"  POST /collect   — HITL 結果ポーリング")
-    print(f"  GET  /pending   — 未決承認一覧（popup.js が使用）")
-    print(f"  POST /decision  — 承認 or 拒否（popup.js が使用）")
-    print(f"  GET  /health    — ヘルスチェック")
+    print(f"  POST /approve   — browser action approval request")
+    print(f"  POST /execute   — execute action with token")
+    print(f"  POST /collect   — poll HITL result")
+    print(f"  GET  /pending   — list of pending approvals (used by popup.js)")
+    print(f"  POST /decision  — approve or deny (used by popup.js)")
+    print(f"  GET  /health    — health check")
     print()
     server.serve_forever()
 
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser(description="Shani Chrome Extension Sidecar")
     p.add_argument("--port", type=int, default=7891, help="Listen port (default: 7891)")
-    p.add_argument("--hitl-dsal", type=int, default=2,
-                   help="D-SAL threshold for human approval (default: 2)")
+    p.add_argument(
+        "--hitl-dsal", type=int, default=2, help="D-SAL threshold for human approval (default: 2)"
+    )
     args = p.parse_args()
     run(port=args.port, hitl_dsal=args.hitl_dsal)

@@ -9,6 +9,7 @@ Import this module FIRST, before any other shani import.
 
 Safe to import even when pydantic IS installed — it does nothing in that case.
 """
+
 import sys
 
 try:

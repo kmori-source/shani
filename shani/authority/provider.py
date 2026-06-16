@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 
-
 # Default authority map (used when no config file is present)
 DEFAULT_AUTHORITY_MAP: dict[int, str] = {
     0: "any-operator",
@@ -55,6 +54,7 @@ class YAMLAuthorityProvider:
 
         with path.open() as f:
             import yaml
+
             data: dict[str, Any] = yaml.safe_load(f)
 
         authority_block = data.get("authority", {})

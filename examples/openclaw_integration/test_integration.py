@@ -22,19 +22,24 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning, module="shani")
 
 
 # ── Start sidecar in-process ────────────────────────────────────────────────
+
 
 def start_sidecar(port: int = 18765) -> threading.Thread:
     from shani_sidecar.server import ShaniSidecar, Handler, sidecar as _
@@ -54,11 +59,11 @@ def start_sidecar(port: int = 18765) -> threading.Thread:
 
 BASE = "http://127.0.0.1:18765"
 
+
 def post(path: str, body: dict) -> dict:
     data = json.dumps(body).encode()
     req = urllib.request.Request(
-        f"{BASE}{path}", data=data,
-        headers={"Content-Type": "application/json"}, method="POST"
+        f"{BASE}{path}", data=data, headers={"Content-Type": "application/json"}, method="POST"
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -78,9 +83,18 @@ PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 failures = []
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg): failures.append(msg); print(f"  {FAIL} {msg}")
-def section(t): print(f"\n  ── {t} ──────────────────────────────────────")
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg):
+    failures.append(msg)
+    print(f"  {FAIL} {msg}")
+
+
+def section(t):
+    print(f"\n  ── {t} ──────────────────────────────────────")
 
 
 def test_health():
@@ -94,14 +108,19 @@ def test_dsal1_auto_approve(sidecar):
     section("D-SAL 1 auto-approval (GET)")
 
     # Step 1: Skill calls /approve
-    r = post("/approve", {
-        "decision_type": "data_access",
-        "target": "https://api.example.com/status",
-        "description": "External API status check — periodic health check",
-        "evidence": [{"source": "monitor", "content": "health check triggered", "confidence": 0.9}],
-        "confidence": 0.9,
-        "blast_radius": "isolated",
-    })
+    r = post(
+        "/approve",
+        {
+            "decision_type": "data_access",
+            "target": "https://api.example.com/status",
+            "description": "External API status check — periodic health check",
+            "evidence": [
+                {"source": "monitor", "content": "health check triggered", "confidence": 0.9}
+            ],
+            "confidence": 0.9,
+            "blast_radius": "isolated",
+        },
+    )
 
     assert r.get("approved") is True, f"Should be auto-approved: {r}"
     assert "token" in r
@@ -110,21 +129,27 @@ def test_dsal1_auto_approve(sidecar):
 
     # Step 2: execute with token
     token = r["token"]
-    r2 = post("/execute", {
-        "token": token,
-        "operation": "http_get",
-        "target": "https://api.example.com/status",
-    })
+    r2 = post(
+        "/execute",
+        {
+            "token": token,
+            "operation": "http_get",
+            "target": "https://api.example.com/status",
+        },
+    )
 
     assert r2.get("success"), f"Execute failed: {r2}"
     ok(f"POST /execute → success")
 
     # Step 3: attempt to reuse token (replay prevention)
-    r3 = post("/execute", {
-        "token": token,
-        "operation": "http_get",
-        "target": "https://api.example.com/status",
-    })
+    r3 = post(
+        "/execute",
+        {
+            "token": token,
+            "operation": "http_get",
+            "target": "https://api.example.com/status",
+        },
+    )
     assert not r3.get("success"), "Should fail: token already used"
     ok(f"Replay blocked: {r3.get('error')}")
 
@@ -133,14 +158,19 @@ def test_dsal2_hitl(sidecar):
     section("D-SAL 2 HITL (POST) — async pattern")
 
     # Step 1: /approve → returns request_id (pending)
-    r = post("/approve", {
-        "decision_type": "configuration_change",
-        "target": "https://api.example.com/reports",
-        "description": "POST summary report to external API — sending LLM-generated summary.",
-        "evidence": [{"source": "openclaw-brain", "content": "LLM-generated summary", "confidence": 0.85}],
-        "confidence": 0.85,
-        "blast_radius": "limited",
-    })
+    r = post(
+        "/approve",
+        {
+            "decision_type": "configuration_change",
+            "target": "https://api.example.com/reports",
+            "description": "POST summary report to external API — sending LLM-generated summary.",
+            "evidence": [
+                {"source": "openclaw-brain", "content": "LLM-generated summary", "confidence": 0.85}
+            ],
+            "confidence": 0.85,
+            "blast_radius": "limited",
+        },
+    )
 
     assert r.get("status") == "pending" or r.get("approved") is True, f"Unexpected: {r}"
 
@@ -154,12 +184,15 @@ def test_dsal2_hitl(sidecar):
         ok(f"POST /approve → pending, request_id={request_id[:8]}...")
 
         # Step2: human (e.g. Slack bot) approves via /decision
-        dr = post("/decision", {
-            "request_id": request_id,
-            "action": "approve",
-            "authority": "operator@example.com",
-            "note": "test approval",
-        })
+        dr = post(
+            "/decision",
+            {
+                "request_id": request_id,
+                "action": "approve",
+                "authority": "operator@example.com",
+                "note": "test approval",
+            },
+        )
         ok(f"POST /decision → {dr}")
 
         # Step3: /collect to retrieve token
@@ -173,12 +206,15 @@ def test_dsal2_hitl(sidecar):
         ok(f"POST /collect → approved, token={token[:8]}...")
 
     # Step 4: execute with token
-    r2 = post("/execute", {
-        "token": token,
-        "operation": "http_post",
-        "target": "https://api.example.com/reports",
-        "payload": {"summary": "test summary"},
-    })
+    r2 = post(
+        "/execute",
+        {
+            "token": token,
+            "operation": "http_post",
+            "target": "https://api.example.com/reports",
+            "payload": {"summary": "test summary"},
+        },
+    )
     assert r2.get("success"), f"Execute failed: {r2}"
     ok(f"POST /execute → success")
 
@@ -186,13 +222,16 @@ def test_dsal2_hitl(sidecar):
 def test_dsal2_hitl_deny(sidecar):
     section("D-SAL 2 HITL deny — async pattern")
 
-    r = post("/approve", {
-        "decision_type": "configuration_change",
-        "target": "https://api.example.com/danger",
-        "description": "Dangerous operation",
-        "evidence": [{"source": "test", "content": "dangerous change", "confidence": 0.5}],
-        "confidence": 0.5,
-    })
+    r = post(
+        "/approve",
+        {
+            "decision_type": "configuration_change",
+            "target": "https://api.example.com/danger",
+            "description": "Dangerous operation",
+            "evidence": [{"source": "test", "content": "dangerous change", "confidence": 0.5}],
+            "confidence": 0.5,
+        },
+    )
 
     if r.get("approved") is False:
         ok(f"POST /approve → immediately denied: {r.get('reason', '')[:50]}")
@@ -203,12 +242,15 @@ def test_dsal2_hitl_deny(sidecar):
         ok(f"POST /approve → pending, request_id={request_id[:8]}...")
 
         # human denies
-        post("/decision", {
-            "request_id": request_id,
-            "action": "deny",
-            "authority": "operator@example.com",
-            "note": "deemed dangerous",
-        })
+        post(
+            "/decision",
+            {
+                "request_id": request_id,
+                "action": "deny",
+                "authority": "operator@example.com",
+                "note": "deemed dangerous",
+            },
+        )
 
         for _ in range(10):
             cr = post("/collect", {"request_id": request_id})
@@ -223,25 +265,31 @@ def test_wrong_operation(sidecar):
     section("Blocking disallowed operations")
 
     # attempt POST with data_access (GET only)
-    r = post("/approve", {
-        "decision_type": "data_access",
-        "target": "https://api.example.com/data",
-        "description": "Data read — health check",
-        "evidence": [{"source": "monitor", "content": "check request", "confidence": 0.9}],
-        "blast_radius": "isolated",
-    })
+    r = post(
+        "/approve",
+        {
+            "decision_type": "data_access",
+            "target": "https://api.example.com/data",
+            "description": "Data read — health check",
+            "evidence": [{"source": "monitor", "content": "check request", "confidence": 0.9}],
+            "blast_radius": "isolated",
+        },
+    )
     # data_access + isolated + evidence → D-SAL 1 → auto-approved
     assert r.get("approved") is True, f"Should be auto-approved: {r}"
     token = r.get("token")
     assert token, f"No token: {r}"
 
     # http_post is not permitted under data_access
-    r2 = post("/execute", {
-        "token": token,
-        "operation": "http_post",  # ← not permitted
-        "target": "https://api.example.com/data",
-        "payload": {},
-    })
+    r2 = post(
+        "/execute",
+        {
+            "token": token,
+            "operation": "http_post",  # ← not permitted
+            "target": "https://api.example.com/data",
+            "payload": {},
+        },
+    )
     assert not r2.get("success")
     ok(f"Blocked: http_post on data_access → {r2.get('type')}")
 
@@ -262,7 +310,8 @@ if __name__ == "__main__":
     print("\n" + "=" * 55)
     if failures:
         print(f"  FAILED: {len(failures)}")
-        for f in failures: print(f"    • {f}")
+        for f in failures:
+            print(f"    • {f}")
         sys.exit(1)
     else:
         print("  All tests passed")

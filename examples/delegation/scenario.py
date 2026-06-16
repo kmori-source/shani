@@ -8,23 +8,33 @@ Shows:
   - Child proposal constrained by parent's max_child_dsal
   - Escalation attempt blocked (child cannot exceed parent's grant)
 """
+
 import sys, os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _s = _iu.spec_from_file_location("_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _m = _iu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    _s = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _m = _iu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
     _sh = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"): setattr(_sh, _k, getattr(_m, _k))
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
+        setattr(_sh, _k, getattr(_m, _k))
     sys.modules["pydantic"] = _sh
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from shani import ShaniEvaluator, StaticAuthorityProvider, DecisionType, BlastRadius, DeniedDecision
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
+
 
 def run():
     print("=" * 58)
@@ -33,11 +43,13 @@ def run():
 
     agents = {
         "orchestrator/v1": AgentIdentity(
-            agent_id="orchestrator/v1", granted_dsal=3,
+            agent_id="orchestrator/v1",
+            granted_dsal=3,
             allowed_decision_types=frozenset(["remediation", "delegation"]),
         ),
         "specialist/v1": AgentIdentity(
-            agent_id="specialist/v1", granted_dsal=2,
+            agent_id="specialist/v1",
+            granted_dsal=2,
             allowed_decision_types=frozenset(["remediation"]),
         ),
     }
@@ -51,7 +63,7 @@ def run():
         decision_type=DecisionType.REMEDIATION,
         proposed_by="orchestrator/v1",
         description="Coordinate incident response: isolate affected host and rotate credentials. "
-                    "Delegating isolation to specialist agent.",
+        "Delegating isolation to specialist agent.",
         target="host:prod-web-04",
         scope=DecisionScope(asset_ids=["host:prod-web-04"]),
         evidence=[
@@ -71,9 +83,11 @@ def run():
         return
 
     print(f"\n  [Step 1] Parent ADO issued")
-    print(f"           dsal={parent_ado.authorized_dsal}  "
-          f"max_child_dsal={parent_ado.delegation_rules.max_child_dsal}  "
-          f"max_depth={parent_ado.delegation_rules.max_depth}")
+    print(
+        f"           dsal={parent_ado.authorized_dsal}  "
+        f"max_child_dsal={parent_ado.delegation_rules.max_child_dsal}  "
+        f"max_depth={parent_ado.delegation_rules.max_depth}"
+    )
 
     # Step 2: Specialist uses parent ADO to get its own (lower D-SAL)
     child_proposal = DecisionProposal(
@@ -119,6 +133,7 @@ def run():
         print(f"  [Step 3] Escalation BLOCKED ✓  reason: {esc_result.reason[:60]}")
     else:
         print(f"  [Step 3] ✗ Escalation succeeded (unexpected)")
+
 
 if __name__ == "__main__":
     run()

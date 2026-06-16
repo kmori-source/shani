@@ -13,6 +13,7 @@ Test cases:
     4. constraint_dilution_prevented — intermediate org cannot strip constraints
     5. chain_depth_limit     — delegation beyond max_depth is blocked
 """
+
 from __future__ import annotations
 
 import os
@@ -42,6 +43,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, DecisionType, BlastRadius
@@ -157,14 +159,16 @@ def test_two_hop_chain(suite: ConformanceSuite) -> None:
     )
 
     # Give Beta ADO delegation rules so Gamma can use it
-    beta_delegating = beta_result.model_copy(update={
-        "delegation_rules": DelegationRules(
-            allowed_sub_decisions=["remediation"],
-            max_child_dsal=1,
-            max_depth=2,
-            max_children=5,
-        ),
-    })
+    beta_delegating = beta_result.model_copy(
+        update={
+            "delegation_rules": DelegationRules(
+                allowed_sub_decisions=["remediation"],
+                max_child_dsal=1,
+                max_depth=2,
+                max_children=5,
+            ),
+        }
+    )
     gamma_result = gamma_ev.evaluate(gamma_proposal, parent_ado=beta_delegating)
 
     gamma_ok = isinstance(gamma_result, AuthorizedDecisionObject)
@@ -205,9 +209,7 @@ def test_three_hop_chain(suite: ConformanceSuite) -> None:
     ]
     alpha_set = set(original_constraints)
 
-    evaluators = {
-        org: _org_ev(f"org-{org}") for org in ("alpha", "beta", "gamma", "delta")
-    }
+    evaluators = {org: _org_ev(f"org-{org}") for org in ("alpha", "beta", "gamma", "delta")}
 
     # Build chain through three hops
     current_ado = make_cross_org_ado(
@@ -231,21 +233,23 @@ def test_three_hop_chain(suite: ConformanceSuite) -> None:
             reversibility=True,
         )
         # Give current ADO delegation rules for the next hop
-        delegating = current_ado.model_copy(update={
-            "delegation_rules": DelegationRules(
-                allowed_sub_decisions=["remediation"],
-                max_child_dsal=1,
-                max_depth=4,
-                max_children=5,
-            ),
-        })
+        delegating = current_ado.model_copy(
+            update={
+                "delegation_rules": DelegationRules(
+                    allowed_sub_decisions=["remediation"],
+                    max_child_dsal=1,
+                    max_depth=4,
+                    max_children=5,
+                ),
+            }
+        )
         result = ev.evaluate(proposal, parent_ado=delegating)
 
         is_ado = isinstance(result, AuthorizedDecisionObject)
         suite.must_pass(
             f"three_hop:{org}_ado_issued",
             condition=is_ado,
-            description=f"Hop {org_names.index(org)+2}: {org} ADO issued under {prev_label} chain",
+            description=f"Hop {org_names.index(org) + 2}: {org} ADO issued under {prev_label} chain",
             detail=f"got {type(result).__name__}: {getattr(result, 'reason', '')}",
             spec_ref="RFC-0002",
         )
@@ -288,6 +292,7 @@ def test_chain_dsal_ceiling(suite: ConformanceSuite) -> None:
     # Use plain make_evaluator (no cross-org policy) so D-SAL ceiling check
     # triggers before any cross-org constraint evaluation.
     from shani.authority.policy import AgentIdentity
+
     child_ev = make_evaluator(
         agents={
             "agent/beta": AgentIdentity(
@@ -317,7 +322,7 @@ def test_chain_dsal_ceiling(suite: ConformanceSuite) -> None:
         proposed_by="agent/beta",
         decision_type=DecisionType.REMEDIATION,
         target="host:dev-01",
-        blast_radius=BlastRadius.SIGNIFICANT,   # increases effective D-SAL above max_child_dsal=1
+        blast_radius=BlastRadius.SIGNIFICANT,  # increases effective D-SAL above max_child_dsal=1
         reversibility=False,
         confidence=0.5,
     )
@@ -408,7 +413,7 @@ def test_constraint_dilution_prevented(suite: ConformanceSuite) -> None:
         proposed_by="agent/gamma",
         decision_type=DecisionType.REMEDIATION,
         target="host:dev-01",
-        blast_radius=BlastRadius.CRITICAL,   # violates max_blast_radius:limited
+        blast_radius=BlastRadius.CRITICAL,  # violates max_blast_radius:limited
         reversibility=True,
     )
     result_blocked = gamma_ev.evaluate(high_blast_proposal, parent_ado=stripped_parent)
@@ -444,14 +449,16 @@ def test_chain_depth_limit(suite: ConformanceSuite) -> None:
         ],
         max_child_dsal=2,
     )
-    shallow_parent = shallow_parent.model_copy(update={
-        "delegation_rules": DelegationRules(
-            allowed_sub_decisions=["remediation"],
-            max_child_dsal=2,
-            max_depth=1,   # no further delegation
-            max_children=5,
-        ),
-    })
+    shallow_parent = shallow_parent.model_copy(
+        update={
+            "delegation_rules": DelegationRules(
+                allowed_sub_decisions=["remediation"],
+                max_child_dsal=2,
+                max_depth=1,  # no further delegation
+                max_children=5,
+            ),
+        }
+    )
 
     # Proposal that itself requests delegation — must be blocked at depth limit
     delegate_proposal = make_proposal(

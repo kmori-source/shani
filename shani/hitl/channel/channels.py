@@ -57,15 +57,15 @@ class CLIApprovalChannel:
         print(f"  Blast Radius: {d['blast_radius'].upper()}  |  Reversible: {d['reversible']}")
         print(f"  D-SAL       : {d['dsal_requested']}  |  Confidence: {d['confidence']}")
         print(f"  Authority   : {d['authority_needed']}")
-        if d['parent']:
+        if d["parent"]:
             print(f"  Parent      : {d['parent']}")
-        if d['evidence']:
+        if d["evidence"]:
             print("  Evidence    :")
-            for e in d['evidence']:
+            for e in d["evidence"]:
                 print(f"    • {e}")
-        if d['assumptions']:
+        if d["assumptions"]:
             print("  Assumptions :")
-            for a in d['assumptions']:
+            for a in d["assumptions"]:
                 print(f"    • {a}")
         print(f"  Timeout     : {d['timeout']}")
         print("═" * 60)
@@ -190,8 +190,11 @@ class WebhookApprovalChannel:
     def send(self, request: ApprovalRequest) -> None:
         try:
             import urllib.request
+
             payload = json.dumps(request.to_display_dict()).encode()
-            req = urllib.request.Request(self._send_url, data=payload, headers=self._headers, method="POST")
+            req = urllib.request.Request(
+                self._send_url, data=payload, headers=self._headers, method="POST"
+            )
             urllib.request.urlopen(req, timeout=self._timeout)
             self._sent.add(request.request_id)
         except Exception as e:
@@ -202,6 +205,7 @@ class WebhookApprovalChannel:
             return None
         try:
             import urllib.request
+
             url = self._poll_template.format(request_id=request_id)
             req = urllib.request.Request(url, headers=self._headers)
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
@@ -251,7 +255,9 @@ class SlackApprovalChannel:
         # POST to Slack API: chat.postMessage
         # payload = {"channel": self._channel, "blocks": blocks, "text": f"Approval needed: {d['action']}"}
         # requests.post("https://slack.com/api/chat.postMessage", json=payload, headers={"Authorization": f"Bearer {self._token}"})
-        print(f"[Slack stub] Would post to {self._channel}: {d['action']} — {d['authority_needed']}")
+        print(
+            f"[Slack stub] Would post to {self._channel}: {d['action']} — {d['authority_needed']}"
+        )
 
     def poll(self, request_id: str) -> ApprovalRequest | None:
         return self._decisions.get(request_id)
@@ -281,10 +287,21 @@ class SlackApprovalChannel:
             text = f"{self._mention}\n{text}"
         return [
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
-            {"type": "actions", "elements": [
-                {"type": "button", "text": {"type": "plain_text", "text": "✓ Approve"},
-                 "style": "primary", "value": f"approve:{request_id}"},
-                {"type": "button", "text": {"type": "plain_text", "text": "✗ Deny"},
-                 "style": "danger", "value": f"deny:{request_id}"},
-            ]},
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "✓ Approve"},
+                        "style": "primary",
+                        "value": f"approve:{request_id}",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "✗ Deny"},
+                        "style": "danger",
+                        "value": f"deny:{request_id}",
+                    },
+                ],
+            },
         ]

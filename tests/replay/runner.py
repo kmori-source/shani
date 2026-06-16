@@ -10,6 +10,7 @@ Usage:
     python tests/replay/runner.py
     python tests/replay/runner.py --json report.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,10 +28,12 @@ sys.path.insert(0, _HERE)
 def _load_pydantic_shim() -> None:
     try:
         import pydantic  # noqa: F401
+
         return
     except ImportError:
         pass
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -46,6 +49,7 @@ def _load_pydantic_shim() -> None:
 _load_pydantic_shim()
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from test_replay import run as run_replay
@@ -77,13 +81,13 @@ def run_all(json_output_path: str | None = None) -> int:
 
     if json_output_path:
         report_data = {
-            "started_at":       started.isoformat(),
-            "finished_at":      finished.isoformat(),
+            "started_at": started.isoformat(),
+            "finished_at": finished.isoformat(),
             "duration_seconds": round(duration, 3),
-            "total":            suite.report.total,
-            "passed":           suite.report.passed_count,
-            "failed":           suite.report.failed_count,
-            "suite":            json.loads(suite.report.to_json()),
+            "total": suite.report.total,
+            "passed": suite.report.passed_count,
+            "failed": suite.report.failed_count,
+            "suite": json.loads(suite.report.to_json()),
         }
         with open(json_output_path, "w") as f:
             json.dump(report_data, f, indent=2)

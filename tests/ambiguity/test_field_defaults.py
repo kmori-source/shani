@@ -10,6 +10,7 @@ not introduce ambiguity or bypass safety invariants:
 - DelegationRules zero-value defaults (no delegation permitted)
 - DecisionProposal scope and evidence defaults
 """
+
 from __future__ import annotations
 
 import os
@@ -39,6 +40,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani.schemas.decision import (

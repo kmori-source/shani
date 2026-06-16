@@ -11,6 +11,7 @@ Test cases:
     4. constraint_narrowing       — child may add constraints (narrowing is allowed)
     5. posture_to_constraints_mapping — UserPosture is correctly serialised to propagated_constraints
 """
+
 from __future__ import annotations
 
 import os
@@ -40,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, DecisionType, BlastRadius
@@ -204,9 +206,11 @@ def test_signature_tamper_detection(suite: ConformanceSuite) -> None:
     )
 
     # Tamper propagated_constraints — must break signature
-    tampered = ado.model_copy(update={
-        "propagated_constraints": ["target_scope:.*", "max_blast_radius:critical"],
-    })
+    tampered = ado.model_copy(
+        update={
+            "propagated_constraints": ["target_scope:.*", "max_blast_radius:critical"],
+        }
+    )
     tampered_fails = not ev.verify_binding(tampered, proposal)
     suite.must_fail(
         "tamper_detection:modified_constraints_fail",
@@ -218,9 +222,11 @@ def test_signature_tamper_detection(suite: ConformanceSuite) -> None:
 
     # Tamper by removing a constraint
     if ado.propagated_constraints:
-        removed = ado.model_copy(update={
-            "propagated_constraints": ado.propagated_constraints[1:],
-        })
+        removed = ado.model_copy(
+            update={
+                "propagated_constraints": ado.propagated_constraints[1:],
+            }
+        )
         removed_fails = not ev.verify_binding(removed, proposal)
         suite.must_fail(
             "tamper_detection:removed_constraint_fails",
@@ -230,9 +236,11 @@ def test_signature_tamper_detection(suite: ConformanceSuite) -> None:
         )
 
     # Tamper by adding an extra constraint
-    extra = ado.model_copy(update={
-        "propagated_constraints": list(ado.propagated_constraints) + ["extra_key:injected"],
-    })
+    extra = ado.model_copy(
+        update={
+            "propagated_constraints": list(ado.propagated_constraints) + ["extra_key:injected"],
+        }
+    )
     extra_fails = not ev.verify_binding(extra, proposal)
     suite.must_fail(
         "tamper_detection:added_constraint_fails",
@@ -342,10 +350,12 @@ def test_posture_to_constraints_mapping(suite: ConformanceSuite) -> None:
         f"reversibility_required:{str(posture.constraints.reversibility_required).lower()}",
         f"minimum_evidence:{posture.constraints.minimum_evidence}",
     ]
-    ado = ado.model_copy(update={
-        "origin_org": "org-source",
-        "propagated_constraints": expected_constraints,
-    })
+    ado = ado.model_copy(
+        update={
+            "origin_org": "org-source",
+            "propagated_constraints": expected_constraints,
+        }
+    )
 
     has_constraints = len(ado.propagated_constraints) > 0
     suite.must_pass(
@@ -357,9 +367,7 @@ def test_posture_to_constraints_mapping(suite: ConformanceSuite) -> None:
     )
 
     # target_scope from posture must appear in propagated_constraints
-    target_scope_present = any(
-        c.startswith("target_scope:") for c in ado.propagated_constraints
-    )
+    target_scope_present = any(c.startswith("target_scope:") for c in ado.propagated_constraints)
     suite.must_pass(
         "posture_mapping:target_scope_present",
         condition=target_scope_present,
@@ -367,9 +375,7 @@ def test_posture_to_constraints_mapping(suite: ConformanceSuite) -> None:
         spec_ref="SPEC §8.8",
     )
 
-    max_blast_present = any(
-        c.startswith("max_blast_radius:") for c in ado.propagated_constraints
-    )
+    max_blast_present = any(c.startswith("max_blast_radius:") for c in ado.propagated_constraints)
     suite.must_pass(
         "posture_mapping:max_blast_radius_present",
         condition=max_blast_present,

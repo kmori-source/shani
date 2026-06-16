@@ -1,25 +1,25 @@
 /**
  * Shani Chrome Extension — Background Service Worker
  *
- * Chrome拡張の中枢。content.js / popup.js からのメッセージを受信し、
- * ローカル Shani サイドカー (http://127.0.0.1:7891) と通信する。
+ * The central hub of the Chrome extension. Receives messages from content.js / popup.js
+ * and communicates with the local Shani sidecar (http://127.0.0.1:7891).
  *
- * メッセージ種別:
- *   shani_request  — content.js から: ブラウザアクションの承認申請
- *   shani_collect  — content.js から: HITL 結果のポーリング
- *   shani_execute  — content.js から: 承認済みトークンでアクション実行
+ * Message types:
+ *   shani_request  — from content.js: approval request for a browser action
+ *   shani_collect  — from content.js: polling for HITL results
+ *   shani_execute  — from content.js: execute action with an approved token
  *
- * Bug 3 対応:
- *   MV3 Service Worker はアイドル時に停止する。停止すると sendResponse
- *   コールバックが失われるため、shani_request が "pending" の場合は
- *   即座に { status: "pending", request_id } を返す。
- *   content.js が shani_collect を定期ポーリングして結果を取得する。
+ * Bug 3 fix:
+ *   MV3 Service Workers stop when idle. When stopped, sendResponse
+ *   callbacks are lost, so if shani_request returns "pending" we
+ *   immediately return { status: "pending", request_id }.
+ *   content.js periodically polls shani_collect to retrieve the result.
  */
 
 const SIDECAR = "http://127.0.0.1:7891";
 const BADGE_POLL_MS = 3000;
 
-// ── サイドカー通信ユーティリティ ──────────────────────────────────────────
+// ── Sidecar communication utilities ──────────────────────────────────────────
 
 async function sidecarPost(path, body) {
   const res = await fetch(`${SIDECAR}${path}`, {
@@ -35,7 +35,7 @@ async function sidecarGet(path) {
   return res.json();
 }
 
-// ── バッジ更新（未決件数を表示）──────────────────────────────────────────
+// ── Badge update (show pending count) ────────────────────────────────────────
 
 async function refreshBadge() {
   try {
@@ -53,25 +53,25 @@ async function refreshBadge() {
 setInterval(refreshBadge, BADGE_POLL_MS);
 refreshBadge();
 
-// ── webNavigation ベースのタブ URL トラッキング (Bug 1 対策の基盤) ─────────
-// page-bridge.js をバイパスしたナビゲーション（CDP 操作や ISOLATED world）を
-// 将来的に検知・インターセプトするためのインフラ。
-// 現時点では前 URL を tabId ごとに追跡するのみ。
+// ── webNavigation-based tab URL tracking (foundation for Bug 1 fix) ──────────
+// Infrastructure for future detection and interception of navigations that bypass
+// page-bridge.js (e.g. CDP operations or ISOLATED world).
+// Currently only tracks the previous URL per tabId.
 
-const _tabLastUrls = new Map(); // tabId → 直前の URL
+const _tabLastUrls = new Map(); // tabId → previous URL
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url) _tabLastUrls.set(tabId, changeInfo.url);
 });
 chrome.tabs.onRemoved.addListener((tabId) => _tabLastUrls.delete(tabId));
 
-// ── メッセージリスナー ────────────────────────────────────────────────────
+// ── Message listener ──────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
 
   if (message.type === "shani_request") {
-    // content.js からのブラウザアクション承認申請
+    // Browser action approval request from content.js
     const body = {
       action: message.action,
       target: message.target,
@@ -85,12 +85,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sidecarPost("/approve", body)
       .then((result) => {
         if (result.approved === null || result.status === "pending") {
-          // HITL 待機中: request_id を返し、content.js 側でポーリングさせる。
-          // Service Worker が停止しても content.js のポーリングは継続するため
-          // 状態が失われない（Bug 3 修正）。
+          // Waiting for HITL: return request_id and let content.js poll.
+          // Even if the Service Worker stops, content.js polling continues
+          // so state is not lost (Bug 3 fix).
           sendResponse({ status: "pending", request_id: result.request_id });
         } else {
-          // 即時承認 or 拒否
+          // Immediate approval or denial
           sendResponse(result);
         }
         refreshBadge();
@@ -99,10 +99,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ approved: false, reason: `Sidecar error: ${err.message}` });
       });
 
-    return true; // 非同期 sendResponse を維持
+    return true; // Keep async sendResponse alive
 
   } else if (message.type === "shani_execute") {
-    // 承認済みトークンでアクション実行
+    // Execute action with an approved token
     sidecarPost("/execute", {
       token: message.token,
       operation: message.operation || "http_get",
@@ -115,7 +115,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
 
   } else if (message.type === "shani_collect") {
-    // content.js からの HITL 結果ポーリング（サイドカーに直接問い合わせ）
+    // HITL result polling from content.js (queries sidecar directly)
     sidecarPost("/collect", { request_id: message.request_id })
       .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ status: "pending", error: err.message }));

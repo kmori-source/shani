@@ -10,6 +10,7 @@ Covers T15 (Ambiguity Escalation) and related boundary cases:
 - expires_at at minimum future offset
 - target matching pattern boundary
 """
+
 from __future__ import annotations
 
 import os
@@ -39,6 +40,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest
@@ -115,6 +117,7 @@ def test_minimum_evidence_exactly_met(suite: ConformanceSuite) -> None:
     """Exactly minimum_evidence items must PASS."""
     suite._section("2a. minimum_evidence exactly met: PASS")
     from shani.schemas.decision import EvidenceItem
+
     posture = make_posture(minimum_evidence=2)
     proposal = make_proposal(
         evidence=[
@@ -135,6 +138,7 @@ def test_minimum_evidence_one_below(suite: ConformanceSuite) -> None:
     """One fewer than minimum_evidence must REJECT."""
     suite._section("2b. minimum_evidence one below: REJECT")
     from shani.schemas.decision import EvidenceItem
+
     posture = make_posture(minimum_evidence=2)
     proposal = make_proposal(
         evidence=[EvidenceItem(source="s1", content="ev1", confidence=0.9)],

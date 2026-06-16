@@ -1,38 +1,38 @@
 /**
  * Shani Chrome Extension — Page Bridge (MAIN world)
  *
- * document_start + world:"MAIN" で注入され、Claude in Chrome が使う
- * ブラウザ API を monkey-patch して Shani ガバナンスを通す。
+ * Injected at document_start + world:"MAIN", monkey-patching the browser APIs
+ * used by Claude in Chrome to route them through Shani governance.
  *
- * MAIN world では chrome.runtime が使えないため、
- * window.postMessage で ISOLATED world の content.js と通信する。
+ * Since chrome.runtime is not available in the MAIN world,
+ * window.postMessage is used to communicate with content.js in the ISOLATED world.
  */
 
 (function () {
   "use strict";
 
-  // ── ユーティリティ ────────────────────────────────────────────────────────
+  // ── Utilities ─────────────────────────────────────────────────────────────
 
   let _reqCounter = 0;
   function nextId() {
     return "pb-" + Date.now() + "-" + ++_reqCounter;
   }
 
-  // 同一 action:target への重複リクエストを排除する。
+  // Deduplicate requests for the same action:target.
   // key: "action:target" → { requestId, callbacks[] }
   const _inflightRequests = new Map();
 
   /**
-   * content.js に承認を問い合わせ、コールバックで結果を受け取る。
-   * 同一 action+target が既に HITL 待機中の場合はコールバックをキューに積み、
-   * 新たなリクエストを送らない（重複排除）。
-   * @param {object} payload  - action / target などのリクエスト情報
-   * @param {function} cb     - cb(approved: boolean) を呼ぶ
+   * Ask content.js for approval and receive the result via callback.
+   * If the same action+target is already waiting for HITL, the callback is
+   * queued and no new request is sent (deduplication).
+   * @param {object} payload  - request info including action / target etc.
+   * @param {function} cb     - calls cb(approved: boolean)
    */
   function askShani(payload, cb) {
-    // scrape / browser_fetch はホスト名単位で重複排除する。
-    // 広告スクリプトが同一ドメインへ大量のリクエストを送っても
-    // 最初の1件のみ Shani に問い合わせ、残りは同じ判断に従う。
+    // scrape / browser_fetch are deduplicated at the hostname level.
+    // Even if ad scripts send large numbers of requests to the same domain,
+    // only the first one is sent to Shani; the rest follow the same decision.
     let dedupKey;
     if (payload.action === "scrape" || payload.action === "browser_fetch") {
       try {
@@ -75,9 +75,9 @@
     window.postMessage({ type: "shani:request", requestId, ...payload }, "*");
   }
 
-  // ── 既知の広告・アナリティクス・トラッキングドメイン ────────────────────
-  // これらは広告スクリプトが大量に呼ぶ外部リクエストであり、
-  // Claude の意図的なアクションではないのでガバナンスをスキップする。
+  // ── Known ad, analytics, and tracking domains ─────────────────────────────
+  // These are external requests made in large numbers by ad scripts,
+  // not intentional actions by Claude, so governance is skipped.
   const _PASSTHROUGH_HOST_SUFFIXES = [
     ".googlesyndication.com",
     ".doubleclick.net",
@@ -107,8 +107,8 @@
     ".yimg.com",
   ];
 
-  // ── 元の関数・ディスクリプタを先にすべて保存 ──────────────────────────────
-  // 後続のパッチ処理が互いに干渉しないよう、パッチ前にキャプチャする。
+  // ── Save all original functions and descriptors upfront ──────────────────
+  // Capture before patching so subsequent patches don't interfere with each other.
 
   const _origOpen         = window.open.bind(window);
   const _origSubmit       = HTMLFormElement.prototype.submit;
@@ -149,12 +149,12 @@
     };
   }
 
-  // ── <a> への script-driven click (isTrusted === false) ───────────────────
+  // ── Script-driven click on <a> (isTrusted === false) ─────────────────────
 
   document.addEventListener(
     "click",
     (event) => {
-      if (event.isTrusted) return; // ユーザー操作はそのまま通す
+      if (event.isTrusted) return; // Pass through user interactions as-is
       const anchor = event.target && event.target.closest("a[href]");
       if (!anchor) return;
       const href = anchor.getAttribute("href");
@@ -165,8 +165,8 @@
 
       const url = new URL(href, location.href).href;
       askShani({ action: "navigate", target: url }, (approved) => {
-        // 承認後は元の assign を直接呼ぶ（パッチ済み Location.prototype.assign を
-        // 経由すると二重に Shani へ問い合わせが起きるため）
+        // After approval, call the original assign directly (calling the patched
+        // Location.prototype.assign would trigger a double query to Shani)
         if (approved) _origAssign.call(location, url);
       });
     },
@@ -192,8 +192,8 @@
   };
 
   // ── Location.prototype.assign / replace ──────────────────────────────────
-  // prototype レベルでパッチすることで、インスタンス経由のすべての呼び出しを
-  // 捕捉できる（インスタンスプロパティとしてパッチした場合との違い）。
+  // Patching at the prototype level captures all calls made via instances
+  // (as opposed to patching as an instance property).
 
   Location.prototype.assign = function (url) {
     if (!url) { _origAssign.call(this, url); return; }
@@ -211,10 +211,10 @@
     });
   };
 
-  // ── location.href setter ───────────────────────────────────────────────────
-  // Bug 2 修正: location インスタンスではなく Location.prototype にパッチする。
-  // インスタンスへの Object.defineProperty は Chrome のセキュリティモデルで
-  // サイレントに失敗する場合があるため、prototype を直接書き換える。
+  // ── location.href setter ──────────────────────────────────────────────────
+  // Bug 2 fix: patch Location.prototype rather than the location instance.
+  // Object.defineProperty on an instance can silently fail under Chrome's
+  // security model, so the prototype is patched directly.
 
   if (_hrefDesc && _hrefDesc.set) {
     const _origHrefSet = _hrefDesc.set;
@@ -232,13 +232,13 @@
         },
       });
     } catch (_e) {
-      // ブラウザによって Location.prototype の書き換えが制限される場合がある
+      // Some browsers may restrict rewriting Location.prototype
     }
   }
 
-  // ── fetch Proxy (アプローチ A) ────────────────────────────────────────────
-  // Claude in Chrome が外部サイトへ fetch する際に Shani の承認を挟む。
-  // claude.ai 自身と同一オリジンのリクエストはそのまま通過させ UX を守る。
+  // ── fetch Proxy (Approach A) ──────────────────────────────────────────────
+  // Intercept Shani approval when Claude in Chrome fetches an external site.
+  // Requests to claude.ai itself and same-origin requests pass through to protect UX.
 
   function _fetchShouldIntercept(url) {
     try {
@@ -279,8 +279,9 @@
     },
   });
 
-  // ── XMLHttpRequest Proxy (アプローチ A 補完) ──────────────────────────────
-  // fetch と同様に XHR も傍受する。open() で URL を記録し send() で判定する。
+  // ── XMLHttpRequest Proxy (Approach A supplement) ──────────────────────────
+  // Intercept XHR in the same way as fetch. Record the URL in open() and
+  // evaluate it in send().
 
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._shaniMethod = method;

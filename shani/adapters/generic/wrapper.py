@@ -107,7 +107,8 @@ class ShaniToolWrapper:
         if isinstance(result, DeniedDecision):
             logger.warning(
                 "Governed tool DENIED | fn=%s reason=%s",
-                self._fn.__name__, result.reason,
+                self._fn.__name__,
+                result.reason,
             )
             if self._raise_on_deny:
                 raise GovernedToolError(
@@ -121,7 +122,9 @@ class ShaniToolWrapper:
 
         logger.info(
             "Governed tool EXECUTING | fn=%s dsal=%s target=%s",
-            self._fn.__name__, result.authorized_dsal, result.intent_binding.target,
+            self._fn.__name__,
+            result.authorized_dsal,
+            result.intent_binding.target,
         )
 
         try:
@@ -187,6 +190,7 @@ def governed_tool(
         def quarantine_host(host: str) -> str:
             ...
     """
+
     def decorator(fn: Callable) -> ShaniToolWrapper:
         return ShaniToolWrapper(
             fn=fn,
@@ -197,4 +201,5 @@ def governed_tool(
             target_extractor=target_extractor,
             **kwargs,
         )
+
     return decorator

@@ -11,6 +11,7 @@ boundary between allowed and denied:
 - Repeated AMBIGUOUS evaluations of the same proposal are consistent
 - Agent decision_type whitelist boundary
 """
+
 from __future__ import annotations
 
 import os
@@ -40,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest

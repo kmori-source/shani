@@ -72,6 +72,7 @@ class SignalSeverity(str, Enum):
     HIGH      → VALID/DEGRADED → VIOLATED
     CRITICAL  → VIOLATED immediately, regardless of current state
     """
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -81,11 +82,11 @@ class SignalSeverity(str, Enum):
 # Default severity mapping for each signal type.
 # Deployments may override individual mappings in their authority config.
 DEFAULT_SEVERITY_MAP: dict[IntegritySignalType, SignalSeverity] = {
-    IntegritySignalType.ASSUMPTION_DRIFT:     SignalSeverity.MEDIUM,
+    IntegritySignalType.ASSUMPTION_DRIFT: SignalSeverity.MEDIUM,
     IntegritySignalType.AGENT_IDENTITY_DRIFT: SignalSeverity.HIGH,
-    IntegritySignalType.ENVIRONMENT_CHANGE:   SignalSeverity.MEDIUM,
+    IntegritySignalType.ENVIRONMENT_CHANGE: SignalSeverity.MEDIUM,
     IntegritySignalType.DELEGATION_VIOLATION: SignalSeverity.HIGH,
-    IntegritySignalType.REPLAY_ATTACK:        SignalSeverity.CRITICAL,
+    IntegritySignalType.REPLAY_ATTACK: SignalSeverity.CRITICAL,
 }
 
 
@@ -102,10 +103,11 @@ class IntegritySignal:
     Signals are the only valid mechanism for triggering DIS transitions.
     Agents must not directly manipulate DIS.
     """
+
     signal_type: IntegritySignalType
-    source: str             # Identifier of the monitor or component emitting this signal
-    decision_id: str | None # Related ADO or proposal, if applicable
-    detail: str             # Human-readable description of what was observed
+    source: str  # Identifier of the monitor or component emitting this signal
+    decision_id: str | None  # Related ADO or proposal, if applicable
+    detail: str  # Human-readable description of what was observed
     evidence: dict[str, Any] = field(default_factory=dict)  # Structured evidence
     emitted_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
@@ -116,6 +118,7 @@ class IntegrityEvent:
     The result of processing an IntegritySignal.
     Records what happened: was a DIS transition triggered, and why.
     """
+
     signal: IntegritySignal
     severity: SignalSeverity
     dis_before: DIS

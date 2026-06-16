@@ -1,9 +1,9 @@
 /**
  * Shani Chrome Extension — Popup UI
  *
- * サイドカーの GET /pending をポーリングし、
- * 承認待ちリクエストを一覧表示する。
- * [承認] / [拒否] ボタンで POST /decision を呼ぶ。
+ * Polls GET /pending on the sidecar and displays a list of
+ * pending approval requests.
+ * Calls POST /decision via the [Approve] / [Deny] buttons.
  */
 
 const SIDECAR = "http://127.0.0.1:7891";
@@ -13,17 +13,17 @@ const $cards = document.getElementById("cards");
 const $empty = document.getElementById("empty");
 const $dot = document.getElementById("status-dot");
 
-// ── 残り時間フォーマット ────────────────────────────────────────────────────
+// ── Remaining time formatter ───────────────────────────────────────────────────
 
 function formatRemaining(isoString) {
   const diff = new Date(isoString) - Date.now();
-  if (diff <= 0) return "タイムアウト";
+  if (diff <= 0) return "Timeout";
   const min = Math.floor(diff / 60000);
   const sec = Math.floor((diff % 60000) / 1000);
-  return min > 0 ? `残 ${min}分${sec}秒` : `残 ${sec}秒`;
+  return min > 0 ? `${min}m ${sec}s remaining` : `${sec}s remaining`;
 }
 
-// ── カード描画 ──────────────────────────────────────────────────────────────
+// ── Card rendering ─────────────────────────────────────────────────────────────
 
 function renderCard(req) {
   const card = document.createElement("div");
@@ -39,26 +39,26 @@ function renderCard(req) {
       <span class="card-action">${req.action || req.decision_type}</span>
       <span class="dsal-badge">D-SAL ${req.dsal}</span>
     </div>
-    <div class="card-row"><span class="label">対象</span><span class="value">${req.target}</span></div>
-    <div class="card-row"><span class="label">エージェント</span><span class="value">${req.proposed_by}</span></div>
-    <div class="card-row"><span class="label">権限</span><span class="value">${req.required_authority}</span></div>
+    <div class="card-row"><span class="label">Target</span><span class="value">${req.target}</span></div>
+    <div class="card-row"><span class="label">Agent</span><span class="value">${req.proposed_by}</span></div>
+    <div class="card-row"><span class="label">Authority</span><span class="value">${req.required_authority}</span></div>
     <div class="card-row"><span class="label">Blast Radius</span><span class="value">${req.blast_radius}</span></div>
     ${evidenceHtml}
     <div class="timeout-row" data-timeout="${req.timeout_at}">${formatRemaining(req.timeout_at)}</div>
     <div class="card-actions">
-      <button class="btn btn-approve" data-id="${req.request_id}">✓ 承認</button>
-      <button class="btn btn-deny" data-id="${req.request_id}">✗ 拒否</button>
+      <button class="btn btn-approve" data-id="${req.request_id}">✓ Approve</button>
+      <button class="btn btn-deny" data-id="${req.request_id}">✗ Deny</button>
     </div>
   `;
 
-  // ボタンイベント
+  // Button events
   card.querySelector(".btn-approve").addEventListener("click", () => decide(req.request_id, "approve", card));
   card.querySelector(".btn-deny").addEventListener("click", () => decide(req.request_id, "deny", card));
 
   return card;
 }
 
-// ── 承認/拒否送信 ───────────────────────────────────────────────────────────
+// ── Approve/deny submission ────────────────────────────────────────────────────
 
 async function decide(requestId, action, card) {
   const btns = card.querySelectorAll(".btn");
@@ -79,18 +79,18 @@ async function decide(requestId, action, card) {
     if (data.ok) {
       card.style.opacity = "0.5";
       setTimeout(() => card.remove(), 600);
-      poll(); // 即時更新
+      poll(); // Immediate update
     } else {
       btns.forEach((b) => (b.disabled = false));
-      alert(`エラー: ${data.error || "Unknown"}`);
+      alert(`Error: ${data.error || "Unknown"}`);
     }
   } catch (err) {
     btns.forEach((b) => (b.disabled = false));
-    alert(`サイドカー通信エラー: ${err.message}`);
+    alert(`Sidecar communication error: ${err.message}`);
   }
 }
 
-// ── タイムアウト表示の更新 ─────────────────────────────────────────────────
+// ── Timeout display update ─────────────────────────────────────────────────────
 
 function updateTimeouts() {
   document.querySelectorAll(".timeout-row[data-timeout]").forEach((el) => {
@@ -100,7 +100,7 @@ function updateTimeouts() {
 
 setInterval(updateTimeouts, 1000);
 
-// ── ポーリング ───────────────────────────────────────────────────────────────
+// ── Polling ────────────────────────────────────────────────────────────────────
 
 async function poll() {
   try {
@@ -110,18 +110,18 @@ async function poll() {
 
     $dot.className = "ok";
 
-    // 既存カードの ID セット
+    // Existing card ID set
     const existingIds = new Set(
       [...$cards.querySelectorAll(".card")].map((c) => c.dataset.requestId)
     );
     const incomingIds = new Set(pending.map((r) => r.request_id));
 
-    // 解消されたカードを削除
+    // Remove resolved cards
     for (const el of $cards.querySelectorAll(".card")) {
       if (!incomingIds.has(el.dataset.requestId)) el.remove();
     }
 
-    // 新着カードを追加
+    // Add new cards
     for (const req of pending) {
       if (!existingIds.has(req.request_id)) {
         $cards.appendChild(renderCard(req));
@@ -130,7 +130,7 @@ async function poll() {
 
     $empty.style.display = pending.length ? "none" : "block";
 
-    // バッジ更新
+    // Badge update
     const count = pending.length;
     chrome.action.setBadgeText({ text: count > 0 ? String(count) : "" });
     chrome.action.setBadgeBackgroundColor({ color: count > 0 ? "#e53e3e" : "#718096" });
@@ -138,7 +138,7 @@ async function poll() {
   } catch {
     $dot.className = "error";
     $empty.style.display = "block";
-    $empty.textContent = "サイドカーに接続できません (http://127.0.0.1:7891)";
+    $empty.textContent = "Cannot connect to sidecar (http://127.0.0.1:7891)";
   }
 }
 

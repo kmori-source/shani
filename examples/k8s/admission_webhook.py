@@ -18,6 +18,7 @@ Run (dev):
     uvicorn admission_webhook:app --host 0.0.0.0 --port 8443 \
         --ssl-keyfile /certs/tls.key --ssl-certfile /certs/tls.crt
 """
+
 from __future__ import annotations
 
 import json
@@ -31,13 +32,17 @@ from typing import Any
 try:
     from fastapi import FastAPI, Request, Response
     import uvicorn
+
     _HAS_FASTAPI = True
 except ImportError:
     _HAS_FASTAPI = False
 
 from shani import (
-    ShaniEvaluator, StaticAuthorityProvider,
-    DecisionType, BlastRadius, DeniedDecision,
+    ShaniEvaluator,
+    StaticAuthorityProvider,
+    DecisionType,
+    BlastRadius,
+    DeniedDecision,
 )
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
@@ -45,6 +50,7 @@ from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
 logger = logging.getLogger("shani.k8s.webhook")
 
 # ── Evaluator setup ──────────────────────────────────────────────────────────
+
 
 def build_evaluator() -> ShaniEvaluator:
     agents = {
@@ -61,9 +67,13 @@ def build_evaluator() -> ShaniEvaluator:
         "sre-automation/v1": AgentIdentity(
             agent_id="sre-automation/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                "configuration_change", "remediation", "network_action",
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    "configuration_change",
+                    "remediation",
+                    "network_action",
+                ]
+            ),
         ),
     }
     return ShaniEvaluator(
@@ -173,6 +183,7 @@ def evaluate_admission(review: dict[str, Any]) -> dict[str, Any]:
 
 def _ado_annotation_patch(ado: object) -> str:
     import base64 as _b64
+
     patches = [
         {
             "op": "add",

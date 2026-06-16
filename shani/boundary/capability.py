@@ -35,6 +35,7 @@ Structure:
       - Single-use: once consumed, cannot be used again
       - Only operations listed in allowed_operations may be called
 """
+
 from __future__ import annotations
 
 import logging
@@ -93,12 +94,14 @@ class Capability:
         self._ado = ado
         self._allowed = allowed_operations
         self._target_prefix = target_prefix
-        self._used = False          # once True, no further use is permitted
+        self._used = False  # once True, no further use is permitted
         self._lock = __import__("threading").Lock()  # thread-safe single-use guarantee
 
         logger.info(
             "Capability issued | decision=%s ops=%s target_prefix=%s",
-            ado.decision_id[:8], sorted(allowed_operations), target_prefix[:40],
+            ado.decision_id[:8],
+            sorted(allowed_operations),
+            target_prefix[:40],
         )
 
     # ── internal validation ───────────────────────────────────────────────
@@ -152,7 +155,8 @@ class Capability:
         # Production: return httpx.get(url).json()
         # Simulation:
         return {
-            "url": url, "status": 200,
+            "url": url,
+            "status": 200,
             "data": {"items": ["item-1", "item-2"], "latency": "38ms"},
             "via": f"Capability(decision={self._ado.decision_id[:8]})",
         }
@@ -163,7 +167,9 @@ class Capability:
         logger.info("Capability.http_post | decision=%s url=%s", self._ado.decision_id[:8], url)
         # Production: return httpx.post(url, json=payload).json()
         return {
-            "url": url, "status": 201, "created": payload,
+            "url": url,
+            "status": 201,
+            "created": payload,
             "id": "resource-001",
             "via": f"Capability(decision={self._ado.decision_id[:8]})",
         }
@@ -188,7 +194,9 @@ class Capability:
     def run_command(self, cmd: str) -> str:
         """Execute a shell command."""
         self._check("run_command", cmd)
-        logger.info("Capability.run_command | decision=%s cmd=%s", self._ado.decision_id[:8], cmd[:40])
+        logger.info(
+            "Capability.run_command | decision=%s cmd=%s", self._ado.decision_id[:8], cmd[:40]
+        )
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
         return result.stdout or result.stderr
 
@@ -231,13 +239,14 @@ class ExecutionBoundary:
         self._gate = gate
         if capability_matrix is not None:
             self._capability_matrix = capability_matrix
-        elif hasattr(gate, '_evaluator') and hasattr(gate._evaluator, '_policy'):
+        elif hasattr(gate, "_evaluator") and hasattr(gate._evaluator, "_policy"):
             self._capability_matrix = gate._evaluator._policy.capability_matrix
-        elif hasattr(gate, '_policy'):
+        elif hasattr(gate, "_policy"):
             self._capability_matrix = gate._policy.capability_matrix
         else:
             # Fallback: use CapabilityMatrix defaults if policy is not reachable
             from ..authority.policy import CapabilityMatrix
+
             self._capability_matrix = CapabilityMatrix()
             logger.warning(
                 "ExecutionBoundary: could not resolve capability_matrix from gate. "
@@ -280,6 +289,7 @@ class ExecutionBoundary:
         target_prefix = ado.exec_context.intent_binding.target
         if target_prefix.startswith("http"):
             from urllib.parse import urlparse
+
             parsed = urlparse(target_prefix)
             target_prefix = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -294,6 +304,9 @@ class ExecutionBoundary:
         )
         logger.info(
             "ExecutionBoundary issued capability | decision=%s dt=%s ops=%s target=%s",
-            ado.decision_id[:8], dt, sorted(allowed_ops), target_prefix[:40],
+            ado.decision_id[:8],
+            dt,
+            sorted(allowed_ops),
+            target_prefix[:40],
         )
         return cap

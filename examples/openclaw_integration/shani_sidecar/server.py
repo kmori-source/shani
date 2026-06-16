@@ -52,15 +52,19 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning, module="shani")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider, DecisionType, BlastRadius, DeniedDecision
@@ -75,6 +79,7 @@ from shani.boundary.capability import ExecutionBoundary, Capability
 # Sidecar State
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ShaniSidecar:
     def __init__(self, hitl_dsal: int = 2):
         self.channel = CallbackApprovalChannel()
@@ -82,10 +87,14 @@ class ShaniSidecar:
             "openclaw-skill/v1": AgentIdentity(
                 agent_id="openclaw-skill/v1",
                 granted_dsal=2,
-                allowed_decision_types=frozenset([
-                    "data_access", "configuration_change",
-                    "remediation", "network_action",
-                ]),
+                allowed_decision_types=frozenset(
+                    [
+                        "data_access",
+                        "configuration_change",
+                        "remediation",
+                        "network_action",
+                    ]
+                ),
             )
         }
         evaluator = ShaniEvaluator(
@@ -128,11 +137,13 @@ class ShaniSidecar:
 
         evidence = []
         for e in body.get("evidence", []):
-            evidence.append(EvidenceItem(
-                source=e.get("source", "openclaw-skill"),
-                content=e.get("content", ""),
-                confidence=float(e.get("confidence", 0.8)),
-            ))
+            evidence.append(
+                EvidenceItem(
+                    source=e.get("source", "openclaw-skill"),
+                    content=e.get("content", ""),
+                    confidence=float(e.get("confidence", 0.8)),
+                )
+            )
 
         target = body.get("target", "unknown")
 
@@ -268,15 +279,17 @@ class ShaniSidecar:
         """GET /pending — list of HITL pending approvals. Called by Slack bot or Web UI."""
         result = []
         for req in self.channel.get_pending():
-            result.append({
-                "request_id": req.request_id,
-                "decision_type": req.decision_type,
-                "target": req.target,
-                "intent": req.intent,
-                "required_authority": req.required_authority,
-                "timeout_at": req.timeout_at.isoformat(),
-                "evidence": req.evidence_summary,
-            })
+            result.append(
+                {
+                    "request_id": req.request_id,
+                    "decision_type": req.decision_type,
+                    "target": req.target,
+                    "intent": req.intent,
+                    "required_authority": req.required_authority,
+                    "timeout_at": req.timeout_at.isoformat(),
+                    "evidence": req.evidence_summary,
+                }
+            )
         return result
 
     def make_decision(self, body: dict) -> dict:
@@ -332,7 +345,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/approve":
             result = sidecar.request_approval(body)
             # pending (HITL) → 202, approved → 200, denied → 403
-            status = 202 if result.get("status") == "pending" else (200 if result.get("approved") else 403)
+            status = (
+                202
+                if result.get("status") == "pending"
+                else (200 if result.get("approved") else 403)
+            )
             self._send(result, status)
         elif self.path == "/collect":
             self._send(sidecar.collect(body))
@@ -365,6 +382,7 @@ def run(port: int = 8765, hitl_dsal: int = 2):
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--hitl-dsal", type=int, default=2)

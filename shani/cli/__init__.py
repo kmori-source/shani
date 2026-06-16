@@ -6,6 +6,7 @@ Usage:
     shani check
     shani demo
 """
+
 from .main import main
 
 __all__ = ["main"]

@@ -33,16 +33,16 @@ from typing import Any
 
 
 class ApprovalStatus(str, Enum):
-    PENDING  = "pending"
+    PENDING = "pending"
     APPROVED = "approved"
-    DENIED   = "denied"
-    TIMEOUT  = "timeout"
-    REVOKED  = "revoked"   # approved, but revoked before/during execution
+    DENIED = "denied"
+    TIMEOUT = "timeout"
+    REVOKED = "revoked"  # approved, but revoked before/during execution
 
 
 class InterventionPoint(str, Enum):
-    PRE_EXECUTION  = "pre_execution"
-    MID_EXECUTION  = "mid_execution"
+    PRE_EXECUTION = "pre_execution"
+    MID_EXECUTION = "mid_execution"
     POST_EXECUTION = "post_execution"
 
 
@@ -58,6 +58,7 @@ class ApprovalRequest:
     - What happens if denied (agent is blocked)
     - How long they have to decide (timeout_at)
     """
+
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     decision_id: str = ""
     decision_type: str = ""
@@ -73,7 +74,7 @@ class ApprovalRequest:
     parent_decision_id: str | None = None
 
     intervention_point: InterventionPoint = InterventionPoint.PRE_EXECUTION
-    required_authority: str = ""      # e.g. "SOC-Analyst", "SecOps-Lead"
+    required_authority: str = ""  # e.g. "SOC-Analyst", "SecOps-Lead"
     timeout_at: datetime = field(
         default_factory=lambda: datetime.now(tz=timezone.utc) + timedelta(minutes=15)
     )
@@ -119,19 +120,19 @@ class ApprovalRequest:
     def to_display_dict(self) -> dict[str, Any]:
         """Human-readable summary for display in any UI/channel."""
         return {
-            "request_id":       self.request_id[:8],
-            "decision_id":      self.decision_id[:8],
-            "agent":            self.proposed_by,
-            "action":           f"{self.decision_type} → {self.target}",
-            "intent":           self.intent,
-            "blast_radius":     self.blast_radius,
-            "reversible":       self.reversibility,
-            "dsal_effective":   self.effective_dsal,
-            "confidence":       f"{self.confidence:.0%}",
-            "evidence":         self.evidence_summary,
-            "assumptions":      self.assumptions,
+            "request_id": self.request_id[:8],
+            "decision_id": self.decision_id[:8],
+            "agent": self.proposed_by,
+            "action": f"{self.decision_type} → {self.target}",
+            "intent": self.intent,
+            "blast_radius": self.blast_radius,
+            "reversible": self.reversibility,
+            "dsal_effective": self.effective_dsal,
+            "confidence": f"{self.confidence:.0%}",
+            "evidence": self.evidence_summary,
+            "assumptions": self.assumptions,
             "authority_needed": self.required_authority,
-            "timeout":          self.timeout_at.strftime("%H:%M:%S UTC"),
-            "status":           self.status.value,
-            "parent":           self.parent_decision_id[:8] if self.parent_decision_id else None,
+            "timeout": self.timeout_at.strftime("%H:%M:%S UTC"),
+            "status": self.status.value,
+            "parent": self.parent_decision_id[:8] if self.parent_decision_id else None,
         }

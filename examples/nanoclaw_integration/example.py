@@ -1,16 +1,16 @@
 """
 examples/nanoclaw_integration/example.py
 
-nanoclaw エージェントに Shani ガバナンスを追加するサンプル。
+Sample showing how to add Shani governance to a nanoclaw agent.
 
-nanoclaw (qwibitai/nanoclaw) は軽量 Python エージェントフレームワーク。
-本例では patch_nanoclaw_agent を使用してゼロコード変更でガバナンスを追加する。
+nanoclaw (qwibitai/nanoclaw) is a lightweight Python agent framework.
+This example uses patch_nanoclaw_agent to add governance with zero code changes.
 
 Usage:
     pip install shani nanoclaw
     python example.py
 
-注: nanoclaw が未インストールの場合、FakeAgent でシミュレートする。
+Note: If nanoclaw is not installed, simulates with FakeAgent.
 """
 
 from __future__ import annotations
@@ -24,15 +24,19 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider
@@ -43,7 +47,7 @@ from shani.hitl.channel.channels import CLIApprovalChannel
 from shani.adapters.nanoclaw import patch_nanoclaw_agent
 
 
-# ─── 1. ガバナンスゲートを構築 ────────────────────────────────────────────────
+# ─── 1. Build governance gate ─────────────────────────────────────────────────
 
 channel = CLIApprovalChannel()
 
@@ -54,9 +58,9 @@ evaluator = ShaniEvaluator(
             "nanoclaw-agent/v1": AgentIdentity(
                 agent_id="nanoclaw-agent/v1",
                 granted_dsal=2,
-                allowed_decision_types=frozenset([
-                    "agent_task", "data_access", "remediation", "configuration_change"
-                ]),
+                allowed_decision_types=frozenset(
+                    ["agent_task", "data_access", "remediation", "configuration_change"]
+                ),
             )
         }
     ),
@@ -65,23 +69,25 @@ evaluator = ShaniEvaluator(
 gate = HITLGate(
     evaluator=evaluator,
     channel=channel,
-    approval_required_at_dsal=2,  # D-SAL 2+ でオペレーター承認が必要
+    approval_required_at_dsal=2,  # D-SAL 2+ requires operator approval
     timeout_minutes=5,
 )
 
 
-# ─── 2. nanoclaw エージェントを定義（本来は nanoclaw.Agent を使用）─────────────
+# ─── 2. Define nanoclaw agent (normally uses nanoclaw.Agent) ──────────────────
+
 
 class FakeNanoclawAgent:
-    """nanoclaw.Agent の簡易シミュレーター。"""
+    """Simple simulator for nanoclaw.Agent."""
+
     def __init__(self, name: str):
         self.name = name
         self.tools: dict = {}
 
     def run(self, task: str) -> str:
-        """タスクを実行（本来は LLM が tools を選択・呼び出す）。"""
+        """Execute a task (normally the LLM selects and calls tools)."""
         print(f"[{self.name}] Running: {task}")
-        # シミュレーション: fetch_data を呼ぶ
+        # Simulation: call fetch_data
         result = self.tools["fetch_data"](url="https://api.example.com/status")
         return f"Result: {result}"
 
@@ -89,38 +95,39 @@ class FakeNanoclawAgent:
 agent = FakeNanoclawAgent("ops-bot")
 
 
-# ─── 3. ツールを登録 ──────────────────────────────────────────────────────────
+# ─── 3. Register tools ────────────────────────────────────────────────────────
+
 
 def fetch_data(url: str) -> str:
-    """外部 API からデータを取得する（read-only）。"""
+    """Fetch data from an external API (read-only)."""
     return f"<data from {url}>"
 
 
 def write_report(path: str, content: str) -> str:
-    """レポートをファイルに書き込む（write）。"""
+    """Write a report to a file (write)."""
     print(f"  Writing to {path}: {content[:40]}")
     return f"written:{path}"
 
 
 agent.tools = {
-    "fetch_data":   fetch_data,
+    "fetch_data": fetch_data,
     "write_report": write_report,
 }
 
 
-# ─── 4. Shani ガバナンスをゼロコード変更で追加 ────────────────────────────────
+# ─── 4. Add Shani governance with zero code changes ───────────────────────────
 
 patch_nanoclaw_agent(
     agent=agent,
     gate=gate,
     proposed_by="nanoclaw-agent/v1",
     policy={
-        # write_report は CONFIGURATION_CHANGE (D-SAL=2) → HITL
+        # write_report is CONFIGURATION_CHANGE (D-SAL=2) → HITL
         "write_report": dict(
             decision_type=DecisionType.CONFIGURATION_CHANGE,
             blast_radius=BlastRadius.LIMITED,
         ),
-        # fetch_data は DATA_ACCESS (D-SAL=1) → 自動承認
+        # fetch_data is DATA_ACCESS (D-SAL=1) → auto-approved
         "fetch_data": dict(
             decision_type=DecisionType.DATA_ACCESS,
             blast_radius=BlastRadius.ISOLATED,
@@ -131,7 +138,7 @@ patch_nanoclaw_agent(
 print("nanoclaw agent patched. All tool calls now go through Shani.")
 
 
-# ─── 5. エージェントを実行 ───────────────────────────────────────────────────
+# ─── 5. Run the agent ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     result = agent.run("Fetch the API status")

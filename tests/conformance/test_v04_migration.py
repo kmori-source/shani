@@ -12,6 +12,7 @@ The existing tests remain runnable independently at:
 This module re-exposes them as a ConformanceSuite so the runner can
 include their results in the unified report.
 """
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -36,6 +38,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from .framework import ConformanceSuite
@@ -99,13 +102,16 @@ def run_v04_as_conformance_suite() -> ConformanceSuite:
         )
 
     tests_to_run = [
-        ("posture_registration",                    test_posture_registration),
-        ("posture_engine_layer1",                   test_posture_engine_layer1),
-        ("posture_ambiguous_produces_refinement",   test_posture_ambiguous_produces_refinement),
-        ("refinement_request_is_not_denied_decision", test_refinement_request_is_not_denied_decision),
-        ("cross_org_propagated_constraints",        test_cross_org_propagated_constraints),
-        ("posture_simulation",                      test_posture_simulation),
-        ("org_policy_absolute_constraints",         test_org_policy_absolute_constraints),
+        ("posture_registration", test_posture_registration),
+        ("posture_engine_layer1", test_posture_engine_layer1),
+        ("posture_ambiguous_produces_refinement", test_posture_ambiguous_produces_refinement),
+        (
+            "refinement_request_is_not_denied_decision",
+            test_refinement_request_is_not_denied_decision,
+        ),
+        ("cross_org_propagated_constraints", test_cross_org_propagated_constraints),
+        ("posture_simulation", test_posture_simulation),
+        ("org_policy_absolute_constraints", test_org_policy_absolute_constraints),
     ]
 
     suite._section("v0.4 Conformance Tests (migrated)")

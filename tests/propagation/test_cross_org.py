@@ -13,6 +13,7 @@ Test cases:
     4. origin_org_preserved_in_chain  — origin_org travels unchanged through the chain
     5. incompatible_reversibility     — Org A allows irreversible; Org B requires reversible
 """
+
 from __future__ import annotations
 
 import os
@@ -42,6 +43,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, DecisionType, BlastRadius
@@ -103,21 +105,23 @@ def test_cross_org_supply_chain(suite: ConformanceSuite) -> None:
     ado_a = make_valid_ado(org_a_ev, org_a_proposal)
 
     # Embed posture constraints into ADO (simulates what evaluator does with signed posture)
-    ado_a = ado_a.model_copy(update={
-        "origin_org": "org-a",
-        "propagated_constraints": [
-            f"target_scope:{org_a_posture.constraints.target_scope}",
-            f"max_blast_radius:{org_a_posture.constraints.max_blast_radius}",
-            f"reversibility_required:{str(org_a_posture.constraints.reversibility_required).lower()}",
-            f"minimum_evidence:{org_a_posture.constraints.minimum_evidence}",
-        ],
-        "delegation_rules": DelegationRules(
-            allowed_sub_decisions=["remediation", "configuration_change"],
-            max_child_dsal=2,
-            max_depth=3,
-            max_children=10,
-        ),
-    })
+    ado_a = ado_a.model_copy(
+        update={
+            "origin_org": "org-a",
+            "propagated_constraints": [
+                f"target_scope:{org_a_posture.constraints.target_scope}",
+                f"max_blast_radius:{org_a_posture.constraints.max_blast_radius}",
+                f"reversibility_required:{str(org_a_posture.constraints.reversibility_required).lower()}",
+                f"minimum_evidence:{org_a_posture.constraints.minimum_evidence}",
+            ],
+            "delegation_rules": DelegationRules(
+                allowed_sub_decisions=["remediation", "configuration_change"],
+                max_child_dsal=2,
+                max_depth=3,
+                max_children=10,
+            ),
+        }
+    )
 
     suite.must_pass(
         "supply_chain:org_a_ado_issued",
@@ -247,6 +251,7 @@ def test_cross_org_min_dsal_gate(suite: ConformanceSuite) -> None:
 
     # child_ev with strict cross_org_min_dsal=3
     from shani.authority.policy import AgentIdentity
+
     strict_agents = {
         "agent/beta": AgentIdentity(
             agent_id="agent/beta",

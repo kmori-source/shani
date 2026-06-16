@@ -3,6 +3,7 @@ tests/ambiguity/conftest.py
 
 pytest fixtures for the ambiguity test suite.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,6 +32,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest

@@ -11,4 +11,5 @@ Or, with tests/fixtures/ on sys.path:
     from proposals import make_proposal
     ...
 """
+
 from __future__ import annotations

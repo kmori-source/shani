@@ -19,35 +19,51 @@ Demonstrates:
 Run:
     python scenario.py
 """
+
 from __future__ import annotations
 
 import os
 import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _s = _iu.spec_from_file_location("_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _m = _iu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    _s = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _m = _iu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
     _sh = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"): setattr(_sh, _k, getattr(_m, _k))
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
+        setattr(_sh, _k, getattr(_m, _k))
     sys.modules["pydantic"] = _sh
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 
 from shani import (
-    ShaniEvaluator, StaticAuthorityProvider,
-    DecisionType, BlastRadius, DeniedDecision,
-    UserPosture, PostureConstraints,
+    ShaniEvaluator,
+    StaticAuthorityProvider,
+    DecisionType,
+    BlastRadius,
+    DeniedDecision,
+    UserPosture,
+    PostureConstraints,
 )
 from shani.schemas.posture import PostureRefinementRequest
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import (
-    DecisionProposal, DecisionScope, EvidenceItem, AuthorizedDecisionObject,
+    DecisionProposal,
+    DecisionScope,
+    EvidenceItem,
+    AuthorizedDecisionObject,
 )
 
 
@@ -60,9 +76,9 @@ def build_org_a_evaluator() -> ShaniEvaluator:
         intent_statement="Supply chain agent: only publish library updates, no prod ops",
         simulation_ref="sim-org-a-2026-01",
         constraints=PostureConstraints(
-            target_scope=r"pkg:.*",         # only package registries
+            target_scope=r"pkg:.*",  # only package registries
             max_blast_radius="significant",
-            reversibility_required=False,   # package publishes are irreversible by design
+            reversibility_required=False,  # package publishes are irreversible by design
             minimum_evidence=1,
         ),
     )
@@ -146,10 +162,10 @@ def main() -> None:
             ),
         ],
         confidence=0.96,
-        reversibility=False,         # package publish is permanent
+        reversibility=False,  # package publish is permanent
         blast_radius=BlastRadius.SIGNIFICANT,
         expires_at=now + timedelta(minutes=30),
-        origin_org="org-a",          # marks this as a cross-org action
+        origin_org="org-a",  # marks this as a cross-org action
     )
 
     ado_a = org_a.evaluate(proposal_a)
@@ -245,7 +261,10 @@ def main() -> None:
 
     # Build a fake parent ADO with origin_org but empty propagated_constraints
     from shani.schemas.decision import (
-        AuthorizedDecisionObject, ExecContext, IntentBinding, DelegationRules,
+        AuthorizedDecisionObject,
+        ExecContext,
+        IntentBinding,
+        DelegationRules,
     )
     import uuid, hashlib, base64
 
@@ -262,7 +281,7 @@ def main() -> None:
             max_children=5,
         ),
         signature=base64.b64encode(b"fake").decode(),
-        propagated_constraints=[],   # intentionally empty
+        propagated_constraints=[],  # intentionally empty
         origin_org="unknown-vendor",
         exec_context=ExecContext(
             decision_type=DecisionType.CONFIGURATION_CHANGE,

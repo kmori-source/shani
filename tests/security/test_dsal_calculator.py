@@ -7,58 +7,82 @@ Verifies that each modifier correctly raises the effective D-SAL.
 Important: Agents do not declare their own D-SAL.
      Shani computes it automatically from proposal context.
 """
+
 from __future__ import annotations
 
 import os, sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"):
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from shani.authority.dsal_calculator import DSALCalculator
 from shani.schemas.decision import (
-    DecisionProposal, DecisionType, BlastRadius, DecisionScope, EvidenceItem
+    DecisionProposal,
+    DecisionType,
+    BlastRadius,
+    DecisionScope,
+    EvidenceItem,
 )
 
 PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures = []
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f": {d}" if d else ""))
-def section(t): print(f"\n  ── {t} ──────────────────────────────────────")
 
-def future(): return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f": {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t} ──────────────────────────────────────")
+
+
+def future():
+    return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
 
 def make_proposal(**overrides) -> DecisionProposal:
     """Create a base low-risk proposal."""
     defaults = dict(
-        decision_type  = DecisionType.REMEDIATION,
-        proposed_by    = "test-agent/v1",
-        description    = "test action",
-        target         = "host:dev-01",        # not production
-        scope          = DecisionScope(),
-        evidence       = [EvidenceItem(source="monitor", content="CPU high", confidence=0.9)],
-        confidence     = 0.9,
-        reversibility  = True,
-        blast_radius   = BlastRadius.LIMITED,
-        delegation     = False,
-        expires_at     = future(),
+        decision_type=DecisionType.REMEDIATION,
+        proposed_by="test-agent/v1",
+        description="test action",
+        target="host:dev-01",  # not production
+        scope=DecisionScope(),
+        evidence=[EvidenceItem(source="monitor", content="CPU high", confidence=0.9)],
+        confidence=0.9,
+        reversibility=True,
+        blast_radius=BlastRadius.LIMITED,
+        delegation=False,
+        expires_at=future(),
     )
     defaults.update(overrides)
     return DecisionProposal(**defaults)
+
 
 calc = DSALCalculator()
 
@@ -124,10 +148,12 @@ def test_no_evidence():
 
 def test_low_confidence_evidence():
     section("low-confidence evidence")
-    p = make_proposal(evidence=[
-        EvidenceItem(source="s", content="uncertain", confidence=0.4),
-        EvidenceItem(source="s2", content="also uncertain", confidence=0.5),
-    ])
+    p = make_proposal(
+        evidence=[
+            EvidenceItem(source="s", content="uncertain", confidence=0.4),
+            EvidenceItem(source="s2", content="also uncertain", confidence=0.5),
+        ]
+    )
     r = calc.calculate(p, base_dsal=1)
     if r.effective != 2:
         fail(f"Expected 2, got {r.effective}", r.explain())
@@ -158,11 +184,11 @@ def test_low_agent_confidence():
 def test_stacked_modifiers():
     section("stacked modifiers (capped at 4)")
     p = make_proposal(
-        target         = "host:prod-critical-01",  # +1 (prod)
-        blast_radius   = BlastRadius.SIGNIFICANT,   # +1
-        reversibility  = False,                     # +1
-        evidence       = [],                        # +1
-        confidence     = 0.3,                       # +1
+        target="host:prod-critical-01",  # +1 (prod)
+        blast_radius=BlastRadius.SIGNIFICANT,  # +1
+        reversibility=False,  # +1
+        evidence=[],  # +1
+        confidence=0.3,  # +1
     )
     r = calc.calculate(p, base_dsal=1)
     # base=1 + prod(+1) + significant(+1) + irreversible(+1) + no_evidence(+1) + low_conf(+1) = 6 → cap 4
@@ -177,12 +203,12 @@ def test_stacked_modifiers():
 def test_cap_at_4():
     section("D-SAL does not exceed 4")
     p = make_proposal(
-        target       = "host:prod-01",
-        blast_radius = BlastRadius.CRITICAL,
-        reversibility = False,
-        evidence     = [],
-        confidence   = 0.2,
-        delegation   = True,
+        target="host:prod-01",
+        blast_radius=BlastRadius.CRITICAL,
+        reversibility=False,
+        evidence=[],
+        confidence=0.2,
+        delegation=True,
     )
     r = calc.calculate(p, base_dsal=3)
     if r.effective > 4:
@@ -194,9 +220,9 @@ def test_cap_at_4():
 def test_explain_output():
     section("explain() output")
     p = make_proposal(
-        target       = "host:prod-01",
-        blast_radius = BlastRadius.SIGNIFICANT,
-        evidence     = [],
+        target="host:prod-01",
+        blast_radius=BlastRadius.SIGNIFICANT,
+        evidence=[],
     )
     r = calc.calculate(p, base_dsal=1)
     explanation = r.explain()
@@ -210,9 +236,9 @@ def test_agent_cannot_reduce_dsal():
     section("Verify agent cannot lower D-SAL")
     # high-risk context
     high_risk = make_proposal(
-        target       = "host:prod-01",
-        blast_radius = BlastRadius.SIGNIFICANT,
-        evidence     = [],
+        target="host:prod-01",
+        blast_radius=BlastRadius.SIGNIFICANT,
+        evidence=[],
     )
     r_high = calc.calculate(high_risk, base_dsal=1)
     ok(f"high-risk context: effective={r_high.effective} (ignored even if agent declared 1)")
@@ -221,10 +247,10 @@ def test_agent_cannot_reduce_dsal():
     # even if an agent could declare requested_dsal=0, the result would not change
     # (impossible because requested_dsal field does not exist in DecisionProposal)
     low_risk = make_proposal(
-        target       = "host:dev-01",
-        blast_radius = BlastRadius.ISOLATED,
-        evidence     = [EvidenceItem(source="s", content="clear", confidence=0.95)],
-        confidence   = 0.95,
+        target="host:dev-01",
+        blast_radius=BlastRadius.ISOLATED,
+        evidence=[EvidenceItem(source="s", content="clear", confidence=0.95)],
+        confidence=0.95,
     )
     r_low = calc.calculate(low_risk, base_dsal=1)
     ok(f"low-risk context: effective={r_low.effective} (legitimately low)")
@@ -254,8 +280,11 @@ if __name__ == "__main__":
     print("\n" + "=" * 57)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
-        import sys; sys.exit(1)
+        for f in _failures:
+            print(f"    • {f}")
+        import sys
+
+        sys.exit(1)
     else:
         print("  All tests passed\n")
         print("  Modifier list (each raises effective D-SAL when applied):")

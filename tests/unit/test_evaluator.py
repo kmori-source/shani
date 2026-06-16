@@ -9,35 +9,48 @@ Design changes from v0.1:
   - Tests reflect RiskPipeline-based evaluation
   - Tests cover DenialContext propagation
 """
+
 from __future__ import annotations
 
 import os, sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"):
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 
 from shani import (
-    ShaniEvaluator, DeniedDecision,
-    StaticAuthorityProvider, DISStateMachine, DIS,
-    DecisionType, BlastRadius,
+    ShaniEvaluator,
+    DeniedDecision,
+    StaticAuthorityProvider,
+    DISStateMachine,
+    DIS,
+    DecisionType,
+    BlastRadius,
 )
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import (
-    DecisionProposal, DecisionScope, EvidenceItem,
+    DecisionProposal,
+    DecisionScope,
+    EvidenceItem,
 )
 from shani.integrity.monitor import IntegritySignal, IntegritySignalType
 
@@ -45,16 +58,32 @@ PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures: list[str] = []
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
-def future(h=1): return datetime.now(tz=timezone.utc) + timedelta(hours=h)
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
 
 
-def make_agent(agent_id="test-agent/v1", granted_dsal=3,
-               types=("remediation", "configuration_change", "network_action", "data_access")):
-    return AgentIdentity(agent_id=agent_id, granted_dsal=granted_dsal,
-                         allowed_decision_types=frozenset(types))
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
+
+
+def future(h=1):
+    return datetime.now(tz=timezone.utc) + timedelta(hours=h)
+
+
+def make_agent(
+    agent_id="test-agent/v1",
+    granted_dsal=3,
+    types=("remediation", "configuration_change", "network_action", "data_access"),
+):
+    return AgentIdentity(
+        agent_id=agent_id, granted_dsal=granted_dsal, allowed_decision_types=frozenset(types)
+    )
 
 
 def make_evaluator(max_dsal=3, kill_switch=False, dis=None, agents=None):
@@ -99,6 +128,7 @@ def make_proposal(
 # ─────────────────────────────────────────────────────────────────────────────
 # Happy path
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_authorized_low_risk():
     section("Happy path — low risk proposal is authorized")
@@ -153,6 +183,7 @@ def test_fake_ado_rejected_by_proposal_hash():
 # Denial paths
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_kill_switch_denies_all():
     section("Kill switch denies all proposals")
     ev = make_evaluator(kill_switch=True)
@@ -166,12 +197,14 @@ def test_dis_violated_denies_all():
     section("DIS=VIOLATED denies all proposals")
     dis = DISStateMachine()
     ev = make_evaluator(dis=dis)
-    ev.process_integrity_signal(IntegritySignal(
-        signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
-        source="test",
-        decision_id="dec-000",
-        detail="identity drift detected",
-    ))
+    ev.process_integrity_signal(
+        IntegritySignal(
+            signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
+            source="test",
+            decision_id="dec-000",
+            detail="identity drift detected",
+        )
+    )
     assert dis.state == DIS.VIOLATED
     result = ev.evaluate(make_proposal())
     assert isinstance(result, DeniedDecision)
@@ -184,8 +217,9 @@ def test_expired_proposal_denied():
     # Use model_construct to bypass the future-only validator,
     # simulating a proposal that was valid when created but has since expired.
     from shani.schemas.decision import DecisionScope, EvidenceItem
+
     p = DecisionProposal.model_construct(
-        decision_id=__import__('uuid').uuid4().hex,
+        decision_id=__import__("uuid").uuid4().hex,
         decision_type=DecisionType.REMEDIATION,
         proposed_by="test-agent/v1",
         description="Test expired proposal",
@@ -279,6 +313,7 @@ def test_evidence_required_for_high_effective_dsal():
 # DenialContext
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_denial_context_is_populated():
     section("DeniedDecision carries pipeline_result + proposal")
     ev = make_evaluator()
@@ -300,6 +335,7 @@ def test_denial_context_is_populated():
 # ─────────────────────────────────────────────────────────────────────────────
 # D-SAL computed from context (not declared by agent)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_effective_dsal_increases_with_risk():
     section("effective_dsal increases with proposal risk")
@@ -338,19 +374,21 @@ def test_agent_cannot_declare_dsal():
     section("DecisionProposal has no requested_dsal field")
     import inspect
     from shani.schemas.decision import DecisionProposal
-    fields = DecisionProposal.__annotations__ if hasattr(DecisionProposal, '__annotations__') else {}
+
+    fields = (
+        DecisionProposal.__annotations__ if hasattr(DecisionProposal, "__annotations__") else {}
+    )
     # Check neither via annotations nor as a settable attribute
     p = make_proposal()
-    assert not hasattr(p, 'requested_dsal'), "requested_dsal should not exist"
+    assert not hasattr(p, "requested_dsal"), "requested_dsal should not exist"
     ok("DecisionProposal has no requested_dsal attribute")
-    if 'requested_dsal' not in fields:
+    if "requested_dsal" not in fields:
         ok("requested_dsal not in DecisionProposal annotations")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 
 def test_capability_is_single_use():
@@ -369,7 +407,8 @@ def test_capability_is_single_use():
         target="https://api.example.com/data",
         scope=DecisionScope(),
         evidence=[EvidenceItem(source="monitor", content="check", confidence=0.9)],
-        confidence=0.9, reversibility=True,
+        confidence=0.9,
+        reversibility=True,
         blast_radius=BlastRadius.ISOLATED,
         expires_at=future(),
     )
@@ -380,6 +419,7 @@ def test_capability_is_single_use():
 
     # First call: success
     import sys, io
+
     result = cap.http_get("https://api.example.com/data")
     assert result["status"] == 200
     ok("First http_get: success ✓")
@@ -406,7 +446,8 @@ def test_capability_is_single_use():
         target="https://api.example.com/data",
         scope=DecisionScope(),
         evidence=[EvidenceItem(source="monitor", content="check", confidence=0.9)],
-        confidence=0.9, reversibility=True,
+        confidence=0.9,
+        reversibility=True,
         blast_radius=BlastRadius.ISOLATED,
         expires_at=future(),
     )
@@ -436,7 +477,8 @@ def test_capability_thread_safe_single_use():
         target="https://api.example.com/data",
         scope=DecisionScope(),
         evidence=[EvidenceItem(source="monitor", content="check", confidence=0.9)],
-        confidence=0.9, reversibility=True,
+        confidence=0.9,
+        reversibility=True,
         blast_radius=BlastRadius.ISOLATED,
         expires_at=future(),
     )
@@ -457,12 +499,15 @@ def test_capability_thread_safe_single_use():
             errors.append(f"other:{e}")
 
     threads = [threading.Thread(target=try_use) for _ in range(10)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     assert len(results) == 1, f"Expected exactly 1 success, got {len(results)}: {results}"
     assert len(errors) == 9, f"Expected 9 exhausted, got {len(errors)}: {errors}"
     ok(f"10 concurrent threads: 1 success / {len(errors)} blocked ✓ (thread-safe)")
+
 
 if __name__ == "__main__":
     print("=" * 58)
@@ -492,7 +537,8 @@ if __name__ == "__main__":
     print("\n" + "=" * 58)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
+        for f in _failures:
+            print(f"    • {f}")
         sys.exit(1)
     else:
         print(f"  All {len([f for f in dir() if f.startswith('test_')])} tests passed.")

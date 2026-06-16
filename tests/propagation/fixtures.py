@@ -6,6 +6,7 @@ Shared factories for the propagation test suite.
 All factories are deterministic and accept keyword overrides so individual
 tests can vary specific fields without duplicating boilerplate.
 """
+
 from __future__ import annotations
 
 import base64
@@ -201,6 +202,7 @@ def make_valid_ado(
 ) -> AuthorizedDecisionObject:
     """Evaluate and return ADO; raise if denied."""
     from shani.schemas.posture import PostureRefinementRequest
+
     result = evaluator.evaluate(proposal)
     if isinstance(result, DeniedDecision):
         raise RuntimeError(f"Unexpected denial in fixture: {result.reason}")
@@ -243,11 +245,13 @@ def make_cross_org_ado(
         max_depth=3,
         max_children=10,
     )
-    return ado.model_copy(update={
-        "origin_org": origin_org,
-        "propagated_constraints": propagated_constraints,
-        "delegation_rules": deleg,
-    })
+    return ado.model_copy(
+        update={
+            "origin_org": origin_org,
+            "propagated_constraints": propagated_constraints,
+            "delegation_rules": deleg,
+        }
+    )
 
 
 def make_fake_cross_org_ado(
