@@ -46,22 +46,22 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DecisionType(str, Enum):
-    REMEDIATION          = "remediation"
+    REMEDIATION = "remediation"
     CONFIGURATION_CHANGE = "configuration_change"
-    DATA_ACCESS          = "data_access"
-    NETWORK_ACTION       = "network_action"
-    DELEGATION           = "delegation"
-    POLICY_UPDATE        = "policy_update"
-    BROWSER_ACTION       = "browser_action"   # Chrome extension / browser automation
-    AGENT_TASK           = "agent_task"        # nanoclaw agent tool execution
-    TOOL_CALL            = "tool_call"         # cowork / Claude API tool_use
+    DATA_ACCESS = "data_access"
+    NETWORK_ACTION = "network_action"
+    DELEGATION = "delegation"
+    POLICY_UPDATE = "policy_update"
+    BROWSER_ACTION = "browser_action"  # Chrome extension / browser automation
+    AGENT_TASK = "agent_task"  # nanoclaw agent tool execution
+    TOOL_CALL = "tool_call"  # cowork / Claude API tool_use
 
 
 class BlastRadius(str, Enum):
-    ISOLATED    = "isolated"
-    LIMITED     = "limited"
+    ISOLATED = "isolated"
+    LIMITED = "limited"
     SIGNIFICANT = "significant"
-    CRITICAL    = "critical"
+    CRITICAL = "critical"
 
 
 # ---------------------------------------------------------------------------
@@ -96,14 +96,18 @@ class DelegationRules(BaseModel):
         description="Whitelist of DecisionType values children may propose. Empty = no delegation.",
     )
     max_child_dsal: int = Field(
-        default=0, ge=0, le=4,
+        default=0,
+        ge=0,
+        le=4,
         description=(
             "Maximum D-SAL a child ADO may be authorized at. "
             "Enforced invariant: max_child_dsal < parent.authorized_dsal."
         ),
     )
     max_depth: int = Field(
-        default=0, ge=0, le=5,
+        default=0,
+        ge=0,
+        le=5,
         description=(
             "Remaining delegation hops allowed. "
             "Decremented by 1 at each delegation. "
@@ -111,7 +115,8 @@ class DelegationRules(BaseModel):
         ),
     )
     max_children: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description=(
             "Maximum number of direct child ADOs this ADO may spawn. "
             "0 = no children permitted. "
@@ -153,7 +158,7 @@ class EvidenceItem(BaseModel):
         default=None,
         description=(
             "Base64-encoded Ed25519 signature over canonical evidence bytes "
-            "({\"content\": content, \"source\": source}). "
+            '({"content": content, "source": source}). '
             "Produced by an external auditor or trusted tool. "
             "EvidenceEvaluator verifies this against signed_by."
         ),
@@ -182,6 +187,7 @@ class IntentBinding(BaseModel):
     Cryptographically bound statement of what this ADO authorizes.
     Included in ExecContext which is part of the signed payload.
     """
+
     intent: str
     target: str
     scope_summary: str
@@ -206,6 +212,7 @@ class ExecContext(BaseModel):
     Included in the signed payload so tampering invalidates the signature,
     but kept separate from the top-level security fields for readability.
     """
+
     decision_type: DecisionType
     intent_binding: IntentBinding
     parent_decision_id: str | None = Field(default=None)
@@ -226,6 +233,7 @@ class DecisionProposal(BaseModel):
     canonical_hash() produces the proposal_hash embedded in the ADO.
     This binds the ADO to the exact proposal it was issued for.
     """
+
     decision_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     decision_type: DecisionType
     proposed_by: str = Field(..., min_length=1)
@@ -267,16 +275,18 @@ class DecisionProposal(BaseModel):
         instance computes it.
         """
         data = {
-            "decision_id":    self.decision_id,
-            "decision_type":  self.decision_type.value,
-            "proposed_by":    self.proposed_by,
-            "description":    self.description,
-            "target":         self.target,
-            "reversibility":  self.reversibility,
-            "blast_radius":   self.blast_radius.value,
-            "expires_at":     self.expires_at.isoformat() if self.expires_at else None,
+            "decision_id": self.decision_id,
+            "decision_type": self.decision_type.value,
+            "proposed_by": self.proposed_by,
+            "description": self.description,
+            "target": self.target,
+            "reversibility": self.reversibility,
+            "blast_radius": self.blast_radius.value,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
         }
-        return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        return hashlib.sha256(
+            json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +356,9 @@ class AuthorizedDecisionObject(BaseModel):
         description="Human role or policy that authorized this decision.",
     )
     authorized_dsal: int = Field(
-        ..., ge=0, le=4,
+        ...,
+        ge=0,
+        le=4,
         description="D-SAL level granted. Upper bound on what the agent may do.",
     )
 
@@ -354,8 +366,7 @@ class AuthorizedDecisionObject(BaseModel):
     delegation_rules: DelegationRules = Field(
         default_factory=DelegationRules,
         description=(
-            "Bounds on child delegation chains. "
-            "All four fields are in the signed payload."
+            "Bounds on child delegation chains. All four fields are in the signed payload."
         ),
     )
 
@@ -377,8 +388,7 @@ class AuthorizedDecisionObject(BaseModel):
     expires_at: datetime = Field(
         ...,
         description=(
-            "When this ADO expires. "
-            "Agents MUST check expires_at > now() before execution."
+            "When this ADO expires. Agents MUST check expires_at > now() before execution."
         ),
     )
 

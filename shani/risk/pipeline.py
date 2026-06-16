@@ -48,16 +48,16 @@ class PipelineResult:
     """final output of RiskPipeline。"""
 
     # ─ results from each component ─
-    evidence_eval:        EvidenceEvaluation
-    risk_score:           RiskScore
-    rule_result:          RuleResult
-    decision_space:       DecisionSpaceAnalysis
-    dsal_mapping:         DSALMapping
+    evidence_eval: EvidenceEvaluation
+    risk_score: RiskScore
+    rule_result: RuleResult
+    decision_space: DecisionSpaceAnalysis
+    dsal_mapping: DSALMapping
 
     # ─ final verdict ─
-    effective_dsal:       int
-    is_hard_denied:       bool          # RuleEngine issued a DENY
-    deny_reason:          str | None    # denial reason when DENY is issued
+    effective_dsal: int
+    is_hard_denied: bool  # RuleEngine issued a DENY
+    deny_reason: str | None  # denial reason when DENY is issued
 
     def explain(self) -> str:
         lines = [
@@ -92,19 +92,19 @@ class RiskPipeline:
 
     def __init__(
         self,
-        risk_assessor:    RiskAssessor | None = None,
-        dsal_mapper:      DSALMapper | None = None,
-        rule_engine:      RuleEngine | None = None,
-        evidence_eval:    EvidenceEvaluator | None = None,
-        space_analyzer:   DecisionSpaceAnalyzer | None = None,
+        risk_assessor: RiskAssessor | None = None,
+        dsal_mapper: DSALMapper | None = None,
+        rule_engine: RuleEngine | None = None,
+        evidence_eval: EvidenceEvaluator | None = None,
+        space_analyzer: DecisionSpaceAnalyzer | None = None,
         evidence_fetcher: EvidenceFetcher | None = None,
     ):
-        self._risk      = risk_assessor or RiskAssessor()
-        self._mapper    = dsal_mapper or DSALMapper()
-        self._rules     = rule_engine or RuleEngine()
-        self._evidence  = evidence_eval or EvidenceEvaluator()
-        self._space     = space_analyzer or DecisionSpaceAnalyzer()
-        self._fetcher   = evidence_fetcher or EvidenceFetcher()
+        self._risk = risk_assessor or RiskAssessor()
+        self._mapper = dsal_mapper or DSALMapper()
+        self._rules = rule_engine or RuleEngine()
+        self._evidence = evidence_eval or EvidenceEvaluator()
+        self._space = space_analyzer or DecisionSpaceAnalyzer()
+        self._fetcher = evidence_fetcher or EvidenceFetcher()
 
     def evaluate(
         self,
@@ -121,9 +121,9 @@ class RiskPipeline:
             alternatives: alternatives considered by the agent (for framing detection)
         """
 
-        # ─ Step 0: Evidence resolution (Pull 型) ───────────────────────
-        # raw_reference が設定されているアイテムを信頼済みソースから取得し、
-        # エージェント提供の content を上書きする（未解決の場合は降格）
+        # ─ Step 0: Evidence resolution (Pull-based) ───────────────────────
+        # Retrieves items with raw_reference set from trusted sources and
+        # overwrites agent-provided content (downgrades unresolved items)
         resolved_evidence = self._fetcher.resolve(list(proposal.evidence))
 
         # ─ Step 1: Evidence evaluation ─────────────────────────────────
@@ -147,12 +147,10 @@ class RiskPipeline:
         ds_analysis = self._space.analyze(proposal, alternatives)
 
         # framing_risk is incorporated into the risk_score aggregate
-        adjusted_aggregate = min(
-            1.0,
-            risk_score.aggregate + ds_analysis.framing_risk_score * 0.2
-        )
+        adjusted_aggregate = min(1.0, risk_score.aggregate + ds_analysis.framing_risk_score * 0.2)
         # simple override (rebuild because frozen dataclass)
         from dataclasses import replace
+
         risk_score = RiskScore(
             aggregate=round(adjusted_aggregate, 4),
             dimensions=risk_score.dimensions,
@@ -201,23 +199,27 @@ class RiskPipeline:
         replaced = False
         for dim in risk_score.dimensions:
             if dim.name == "evidence":
-                new_dims.append(RiskDimension(
-                    name="evidence",
-                    score=evidence_risk,
-                    weight=dim.weight,
-                    explanation=ev_eval.summary,
-                ))
+                new_dims.append(
+                    RiskDimension(
+                        name="evidence",
+                        score=evidence_risk,
+                        weight=dim.weight,
+                        explanation=ev_eval.summary,
+                    )
+                )
                 replaced = True
             else:
                 new_dims.append(dim)
 
         if not replaced:
-            new_dims.append(RiskDimension(
-                name="evidence",
-                score=evidence_risk,
-                weight=0.20,
-                explanation=ev_eval.summary,
-            ))
+            new_dims.append(
+                RiskDimension(
+                    name="evidence",
+                    score=evidence_risk,
+                    weight=0.20,
+                    explanation=ev_eval.summary,
+                )
+            )
 
         total_weight = sum(d.weight for d in new_dims)
         new_aggregate = sum(d.score * d.weight for d in new_dims) / total_weight

@@ -12,6 +12,7 @@ A CRS agent proposes actions before execution.  Shani evaluates each proposal:
   - Ensemble CRS coordination → bounded by delegation rules.
   - Kill switch → full CRS campaign suspended.
 """
+
 from __future__ import annotations
 
 import os
@@ -307,9 +308,7 @@ def test_prod_irreversible_patch_denied():
 
     result = evaluator.evaluate(proposal)
 
-    assert isinstance(result, DeniedDecision), (
-        "Expected denial for irreversible prod patch"
-    )
+    assert isinstance(result, DeniedDecision), "Expected denial for irreversible prod patch"
     ok(f"prod patch denied: {result.reason[:70]}")
 
 

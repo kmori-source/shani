@@ -1,4 +1,5 @@
 """shani demo — Run the HITL approval demo."""
+
 from __future__ import annotations
 
 import argparse
@@ -14,7 +15,9 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
     scenario_path = (
         pathlib.Path(__file__).parent.parent.parent.parent
-        / "examples" / "hitl_approval" / "scenario.py"
+        / "examples"
+        / "hitl_approval"
+        / "scenario.py"
     )
 
     if not scenario_path.exists():

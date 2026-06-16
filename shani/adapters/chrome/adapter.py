@@ -1,19 +1,19 @@
 """
 Shani Chrome Extension Adapter.
 
-Chrome拡張機能からのブラウザ操作リクエストを Shani ガバナンスで制御する。
+Controls browser operation requests from Chrome extensions with Shani governance.
 
 Flow:
     content.js / background.js
         ↓ message: {"action": "navigate", "target": "https://...", ...}
     ChromeAdapter.handle_message()
-        ↓ DecisionProposal を構築 → gate.evaluate()
+        ↓ builds DecisionProposal → gate.evaluate()
     Shani (HITLGate or ShaniEvaluator)
-        ↓ D-SAL >= threshold → HITL待機 or 即時承認
+        ↓ D-SAL >= threshold → HITL wait or immediate approval
     ChromeAdapter
-        ↓ ADO → capability token 返却
+        ↓ ADO → capability token returned
     Chrome Extension
-        ↓ POST /execute with token → アクション実行
+        ↓ POST /execute with token → action execution
 
 Usage:
     from shani.adapters.chrome import ChromeAdapter, BrowserAction
@@ -21,7 +21,7 @@ Usage:
 
     adapter = ChromeAdapter(gate=hitl_gate, proposed_by="chrome-extension/v1")
 
-    # Chrome拡張からのメッセージを処理
+    # Process message from Chrome extension
     result = adapter.handle_message({
         "action": "navigate",
         "target": "https://example.com",
@@ -29,7 +29,7 @@ Usage:
     })
     # → {"approved": True, "token": "...", "allowed_ops": [...]}
     # → {"approved": None, "request_id": "...", "status": "pending"}  (HITL)
-    # → {"approved": False, "reason": "..."}  (拒否)
+    # → {"approved": False, "reason": "..."}  (denied)
 """
 
 from __future__ import annotations
@@ -58,35 +58,36 @@ GovernanceGate = ShaniEvaluator | HITLGate
 
 
 class BrowserAction(str, Enum):
-    """Chrome拡張が要求できるブラウザ操作の種別。"""
+    """Types of browser operations that Chrome extensions can request."""
+
     NAVIGATE = "navigate"
     SCRAPE = "scrape"
     SCREENSHOT = "screenshot"
     FILL_FORM = "fill_form"
     CLICK = "click"
     INJECT_SCRIPT = "inject_script"
-    BROWSER_FETCH = "browser_fetch"  # fetch/XHR による外部リクエスト（Proxy インターセプト）
+    BROWSER_FETCH = "browser_fetch"  # external requests via fetch/XHR (Proxy intercept)
 
 
-# BrowserAction ごとのガバナンスポリシー
+# Governance policy per BrowserAction
 # (DecisionType, BlastRadius, reversibility)
 BROWSER_ACTION_POLICY: dict[BrowserAction, tuple[DecisionType, BlastRadius, bool]] = {
-    BrowserAction.NAVIGATE:      (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
-    BrowserAction.SCRAPE:        (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
-    BrowserAction.SCREENSHOT:    (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED,    True),
-    BrowserAction.FILL_FORM:     (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
-    BrowserAction.CLICK:         (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
+    BrowserAction.NAVIGATE: (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED, True),
+    BrowserAction.SCRAPE: (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED, True),
+    BrowserAction.SCREENSHOT: (DecisionType.BROWSER_ACTION, BlastRadius.ISOLATED, True),
+    BrowserAction.FILL_FORM: (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED, True),
+    BrowserAction.CLICK: (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED, True),
     BrowserAction.INJECT_SCRIPT: (DecisionType.BROWSER_ACTION, BlastRadius.SIGNIFICANT, False),
-    BrowserAction.BROWSER_FETCH: (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED,     True),
+    BrowserAction.BROWSER_FETCH: (DecisionType.BROWSER_ACTION, BlastRadius.LIMITED, True),
 }
 
 
 class ChromeAdapter:
     """
-    Chrome拡張機能からのメッセージを Shani ガバナンスに橋渡しするアダプター。
+    Adapter that bridges messages from Chrome extensions to Shani governance.
 
-    HTTP サイドカーから呼ばれることを想定しているが、
-    直接 Python から使用することも可能。
+    Intended to be called from an HTTP sidecar, but can also be
+    used directly from Python.
     """
 
     def __init__(
@@ -100,41 +101,43 @@ class ChromeAdapter:
         self._timeout_minutes = timeout_minutes
         self._boundary = ExecutionBoundary(gate)
 
-        # token → Capability (承認済み)
+        # token → Capability (approved)
         self._caps: dict[str, Capability] = {}
-        # request_id → DecisionProposal (HITL待機中)
+        # request_id → DecisionProposal (pending HITL)
         self._pending_proposals: dict[str, DecisionProposal] = {}
-        # dedup key "action:target" → request_id (HITL重複排除用)
+        # dedup key "action:target" → request_id (for HITL deduplication)
         self._pending_dedup: dict[str, str] = {}
         self._lock = threading.Lock()
 
     def handle_message(self, message: dict[str, Any]) -> dict[str, Any]:
         """
-        Chrome拡張からのアクションリクエストを処理する。
+        Processes an action request from a Chrome extension.
 
         Args:
             message: {
                 "action": "navigate" | "scrape" | "screenshot" | "fill_form" | "click" | "inject_script" | "browser_fetch",
-                "target": "https://...",      # 対象URL
-                "tab_url": "https://...",     # 現在のタブURL（コンテキスト）
-                "args": {...},                # アクション固有の引数
-                "description": "...",        # 任意: 意図の説明
-                "confidence": 0.8,           # 任意: 信頼度 (0-1)
-                "evidence": [...],           # 任意: EvidenceItem リスト
+                "target": "https://...",      # target URL
+                "tab_url": "https://...",     # current tab URL (context)
+                "args": {...},                # action-specific arguments
+                "description": "...",        # optional: description of intent
+                "confidence": 0.8,           # optional: confidence level (0-1)
+                "evidence": [...],           # optional: list of EvidenceItems
             }
 
         Returns:
-            即時承認: {"approved": True, "token": "...", "allowed_ops": [...], "expires_at": "..."}
-            HITL待機: {"approved": None, "request_id": "...", "status": "pending"}
-            拒否:     {"approved": False, "reason": "..."}
-            エラー:   {"error": "..."}
+            immediate approval: {"approved": True, "token": "...", "allowed_ops": [...], "expires_at": "..."}
+            HITL pending:       {"approved": None, "request_id": "...", "status": "pending"}
+            denied:             {"approved": False, "reason": "..."}
+            error:              {"error": "..."}
         """
         raw_action = message.get("action", "")
         try:
             action = BrowserAction(raw_action)
         except ValueError:
-            return {"error": f"Unknown browser action: '{raw_action}'. "
-                             f"Valid actions: {[a.value for a in BrowserAction]}"}
+            return {
+                "error": f"Unknown browser action: '{raw_action}'. "
+                f"Valid actions: {[a.value for a in BrowserAction]}"
+            }
 
         target = message.get("target", "unknown")
         tab_url = message.get("tab_url", "")
@@ -151,11 +154,13 @@ class ChromeAdapter:
             )
         ]
         for e in message.get("evidence", []):
-            evidence.append(EvidenceItem(
-                source=e.get("source", "chrome-extension"),
-                content=e.get("content", ""),
-                confidence=float(e.get("confidence", 0.8)),
-            ))
+            evidence.append(
+                EvidenceItem(
+                    source=e.get("source", "chrome-extension"),
+                    content=e.get("content", ""),
+                    confidence=float(e.get("confidence", 0.8)),
+                )
+            )
 
         proposal = DecisionProposal(
             decision_type=decision_type,
@@ -170,15 +175,19 @@ class ChromeAdapter:
             expires_at=datetime.now(tz=timezone.utc) + timedelta(minutes=self._timeout_minutes),
         )
 
-        # D-SAL を確認して即時 or HITL パスを選択
+        # Check D-SAL and select immediate or HITL path
         effective_dsal = self._gate._get_effective_dsal(proposal)
 
         if effective_dsal < self._gate._threshold:
-            # 即時承認パス
+            # Immediate approval path
             result = self._gate.evaluate(proposal)
             if isinstance(result, DeniedDecision):
-                logger.warning("Chrome action DENIED | action=%s target=%s reason=%s",
-                               action.value, target, result.reason)
+                logger.warning(
+                    "Chrome action DENIED | action=%s target=%s reason=%s",
+                    action.value,
+                    target,
+                    result.reason,
+                )
                 return {"approved": False, "reason": result.reason}
 
             cap = self._boundary.issue_capability(result, proposal)
@@ -186,8 +195,12 @@ class ChromeAdapter:
             with self._lock:
                 self._caps[token] = cap
 
-            logger.info("Chrome action APPROVED | action=%s target=%s dsal=%s",
-                        action.value, target, result.authorized_dsal)
+            logger.info(
+                "Chrome action APPROVED | action=%s target=%s dsal=%s",
+                action.value,
+                target,
+                result.authorized_dsal,
+            )
             return {
                 "approved": True,
                 "token": token,
@@ -196,13 +209,17 @@ class ChromeAdapter:
                 "decision_id": result.decision_id[:8],
             }
         else:
-            # HITL パス（非同期）
+            # HITL path（async）
             dedup_key = f"{action.value}:{target}"
             with self._lock:
                 existing_id = self._pending_dedup.get(dedup_key)
             if existing_id:
-                logger.info("Chrome action DEDUP HITL | action=%s target=%s → reusing %s",
-                            action.value, target, existing_id)
+                logger.info(
+                    "Chrome action DEDUP HITL | action=%s target=%s → reusing %s",
+                    action.value,
+                    target,
+                    existing_id,
+                )
                 return {"approved": None, "request_id": existing_id, "status": "pending"}
 
             try:
@@ -210,20 +227,24 @@ class ChromeAdapter:
                 with self._lock:
                     self._pending_proposals[request_id] = proposal
                     self._pending_dedup[dedup_key] = request_id
-                logger.info("Chrome action PENDING HITL | action=%s target=%s request_id=%s",
-                            action.value, target, request_id)
+                logger.info(
+                    "Chrome action PENDING HITL | action=%s target=%s request_id=%s",
+                    action.value,
+                    target,
+                    request_id,
+                )
                 return {"approved": None, "request_id": request_id, "status": "pending"}
             except Exception as exc:
                 return {"approved": False, "reason": str(exc)}
 
     def collect(self, request_id: str) -> dict[str, Any]:
         """
-        HITL 待機中のリクエストの結果をポーリングする。
+        Polls for the result of a pending HITL request.
 
         Returns:
-            待機中:   {"status": "pending"}
-            承認済み: {"approved": True, "token": "...", ...}
-            拒否済み: {"approved": False, "reason": "..."}
+            pending:  {"status": "pending"}
+            approved: {"approved": True, "token": "...", ...}
+            denied:   {"approved": False, "reason": "..."}
         """
         with self._lock:
             proposal = self._pending_proposals.get(request_id)
@@ -238,7 +259,9 @@ class ChromeAdapter:
         if isinstance(result, DeniedDecision):
             with self._lock:
                 self._pending_proposals.pop(request_id, None)
-                self._pending_dedup = {k: v for k, v in self._pending_dedup.items() if v != request_id}
+                self._pending_dedup = {
+                    k: v for k, v in self._pending_dedup.items() if v != request_id
+                }
             return {"approved": False, "reason": result.reason}
 
         # ADO → Capability → token
@@ -257,16 +280,17 @@ class ChromeAdapter:
             "decision_id": result.decision_id[:8],
         }
 
-    def execute(self, token: str, operation: str, target: str,
-                payload: dict | None = None) -> dict[str, Any]:
+    def execute(
+        self, token: str, operation: str, target: str, payload: dict | None = None
+    ) -> dict[str, Any]:
         """
-        承認済みトークンを使ってアクションを実行する（single-use）。
+        Executes an action using an approved token (single-use).
 
         Args:
-            token:     handle_message() または collect() で受け取ったトークン
+            token:     token received from handle_message() or collect()
             operation: "http_get" | "http_post"
-            target:    実行対象 URL
-            payload:   http_post 時のボディ
+            target:    target URL for execution
+            payload:   body for http_post
 
         Returns:
             {"success": True, "result": ...}
@@ -284,8 +308,11 @@ class ChromeAdapter:
             elif operation == "http_post":
                 result = cap.http_post(target, payload or {})
             else:
-                return {"success": False, "error": f"Unsupported operation: {operation}. "
-                                                    f"browser_action supports: http_get, http_post"}
+                return {
+                    "success": False,
+                    "error": f"Unsupported operation: {operation}. "
+                    f"browser_action supports: http_get, http_post",
+                }
             return {"success": True, "result": result}
         except Exception as exc:
             return {"success": False, "error": str(exc), "type": type(exc).__name__}

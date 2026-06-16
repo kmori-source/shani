@@ -118,7 +118,7 @@ class InMemoryNonceStore:
                 )
             self._consumed[nonce] = {
                 "decision_id": decision_id,
-                "agent_id":    agent_id,
+                "agent_id": agent_id,
                 "consumed_at": datetime.now(tz=timezone.utc).isoformat(),
             }
 
@@ -178,7 +178,7 @@ class FileNonceStore:
                     if nonce and nonce not in self._memory._consumed:
                         self._memory._consumed[nonce] = {
                             "decision_id": record.get("decision_id", ""),
-                            "agent_id":    record.get("agent_id", ""),
+                            "agent_id": record.get("agent_id", ""),
                             "consumed_at": record.get("consumed_at", ""),
                         }
                 except json.JSONDecodeError:
@@ -190,13 +190,13 @@ class FileNonceStore:
             existing = self._memory.get_record(nonce)
             raise NonceAlreadyConsumed(
                 f"Replay detected: nonce {nonce[:16]}... already consumed. "
-                f"Original: decision={existing['decision_id'][:8]} at={existing['consumed_at']}"
+                f"Original: decision={existing['decision_id'][:8]} at={existing['consumed_at']}"  # type: ignore[index]
             )
 
         record = {
-            "nonce":       nonce,
+            "nonce": nonce,
             "decision_id": decision_id,
-            "agent_id":    agent_id,
+            "agent_id": agent_id,
             "consumed_at": datetime.now(tz=timezone.utc).isoformat(),
         }
 
@@ -206,7 +206,7 @@ class FileNonceStore:
                 existing = self._memory.get_record(nonce)
                 raise NonceAlreadyConsumed(
                     f"Replay detected (concurrent): nonce {nonce[:16]}... "
-                    f"Original: {existing['decision_id'][:8]}"
+                    f"Original: {existing['decision_id'][:8]}"  # type: ignore[index]
                 )
 
             # Acquire cross-process exclusive lock via a dedicated lock file.
@@ -229,7 +229,7 @@ class FileNonceStore:
                                     if entry.get("nonce") == nonce:
                                         rec = {
                                             "decision_id": entry.get("decision_id", ""),
-                                            "agent_id":    entry.get("agent_id", ""),
+                                            "agent_id": entry.get("agent_id", ""),
                                             "consumed_at": entry.get("consumed_at", ""),
                                         }
                                         self._memory._consumed[nonce] = rec
@@ -251,7 +251,7 @@ class FileNonceStore:
 
             self._memory._consumed[nonce] = {
                 "decision_id": record["decision_id"],
-                "agent_id":    record["agent_id"],
+                "agent_id": record["agent_id"],
                 "consumed_at": record["consumed_at"],
             }
 

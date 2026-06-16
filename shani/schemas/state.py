@@ -132,9 +132,7 @@ class DISStateMachine:
             )
 
         if (self._state, to) not in self._ALLOWED_TRANSITIONS and self._state != to:
-            raise ValueError(
-                f"Illegal DIS transition: {self._state} → {to}"
-            )
+            raise ValueError(f"Illegal DIS transition: {self._state} → {to}")
 
         record = DISTransition(
             from_state=self._state,
@@ -186,11 +184,12 @@ class DISStateMachine:
         """Persist a DIS transition to the log file (SPEC §4.4: transitions MUST be logged)."""
         import json as _json
         import logging as _logging
+
         entry = {
-            "timestamp":    record.timestamp.isoformat(),
-            "from_state":   record.from_state.value,
-            "to_state":     record.to_state.value,
-            "reason":       record.reason,
+            "timestamp": record.timestamp.isoformat(),
+            "from_state": record.from_state.value,
+            "to_state": record.to_state.value,
+            "reason": record.reason,
             "triggered_by": record.triggered_by,
         }
         # Always emit to Python logging for audit trail (SPEC §4.4)

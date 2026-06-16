@@ -85,6 +85,7 @@ class PostureEngine:
         # Catches cases where OrgPolicy tightened after the posture was registered.
         if self._org_policy is not None:
             from ..authority.policy import DecisionPolicyProvider
+
             provider = DecisionPolicyProvider(
                 org_policy=self._org_policy,
                 allow_unregistered_agents=True,
@@ -126,9 +127,7 @@ class PostureEngine:
     # Any constraint violation → REJECT (deterministic, no LLM)
     # ------------------------------------------------------------------
 
-    def _layer1(
-        self, proposal: DecisionProposal
-    ) -> tuple[PostureOutcome, list[str], list[str]]:
+    def _layer1(self, proposal: DecisionProposal) -> tuple[PostureOutcome, list[str], list[str]]:
         c = self._posture.constraints
         matched: list[str] = []
 
@@ -140,7 +139,7 @@ class PostureEngine:
         # max_blast_radius: enum ordering check
         try:
             proposal_br_idx = _BLAST_RADIUS_ORDER.index(proposal.blast_radius)
-            max_br_idx      = _BLAST_RADIUS_ORDER.index(BlastRadius(c.max_blast_radius))
+            max_br_idx = _BLAST_RADIUS_ORDER.index(BlastRadius(c.max_blast_radius))
         except ValueError:
             # Unknown blast_radius value → AMBIGUOUS (unknown vocabulary)
             return PostureOutcome.AMBIGUOUS, matched, ["max_blast_radius"]
@@ -186,19 +185,19 @@ class PostureEngine:
                 if score >= 0.85:
                     logger.info(
                         "POSTURE LAYER2 REJECT | decision=%s semantic_risk=%.3f",
-                        proposal.decision_id[:8], score,
+                        proposal.decision_id[:8],
+                        score,
                     )
                     return PostureOutcome.REJECT, matched, ["semantic_risk_exceeded"]
                 if score >= 0.6:
                     logger.info(
                         "POSTURE LAYER2 AMBIGUOUS | decision=%s semantic_risk=%.3f",
-                        proposal.decision_id[:8], score,
+                        proposal.decision_id[:8],
+                        score,
                     )
                     return PostureOutcome.AMBIGUOUS, matched, ["semantic_risk_uncertain"]
             except Exception as exc:
-                logger.warning(
-                    "POSTURE LAYER2 pipeline error — defaulting to AMBIGUOUS | %s", exc
-                )
+                logger.warning("POSTURE LAYER2 pipeline error — defaulting to AMBIGUOUS | %s", exc)
                 return PostureOutcome.AMBIGUOUS, matched, ["semantic_evaluation_failed"]
 
         return PostureOutcome.PASS, matched, []
@@ -218,10 +217,10 @@ class PostureEngine:
     @staticmethod
     def _suggest_update(unresolved: list[str]) -> str | None:
         hints = {
-            "target_scope":           "Broaden target_scope pattern to include this target.",
-            "max_blast_radius":       "Increase max_blast_radius if this blast level is acceptable.",
+            "target_scope": "Broaden target_scope pattern to include this target.",
+            "max_blast_radius": "Increase max_blast_radius if this blast level is acceptable.",
             "reversibility_required": "Set reversibility_required: false if irreversible ops are acceptable.",
-            "minimum_evidence":       "Lower minimum_evidence or add evidence items to the proposal.",
+            "minimum_evidence": "Lower minimum_evidence or add evidence items to the proposal.",
         }
         suggestions = [hints[c] for c in unresolved if c in hints]
         return " ".join(suggestions) if suggestions else None

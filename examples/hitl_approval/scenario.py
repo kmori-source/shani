@@ -13,18 +13,27 @@ Run modes:
   python scenario.py           # auto-approve all
   SHANI_HITL_AUTO=deny python scenario.py   # auto-deny all
 """
+
 import sys, os, threading, time
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _s = _iu.spec_from_file_location("_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _m = _iu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    _s = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _m = _iu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
     _sh = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"): setattr(_sh, _k, getattr(_m, _k))
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
+        setattr(_sh, _k, getattr(_m, _k))
     sys.modules["pydantic"] = _sh
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from shani import ShaniEvaluator, StaticAuthorityProvider, DecisionType, BlastRadius, DeniedDecision
@@ -39,10 +48,11 @@ HITL_AUTO = os.environ.get("SHANI_HITL_AUTO", "approve").lower()
 def build_gate(channel: CallbackApprovalChannel) -> HITLGate:
     agents = {
         "ops-agent/v1": AgentIdentity(
-            agent_id="ops-agent/v1", granted_dsal=3,
-            allowed_decision_types=frozenset([
-                "remediation", "configuration_change", "network_action"
-            ]),
+            agent_id="ops-agent/v1",
+            granted_dsal=3,
+            allowed_decision_types=frozenset(
+                ["remediation", "configuration_change", "network_action"]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -59,6 +69,7 @@ def build_gate(channel: CallbackApprovalChannel) -> HITLGate:
 
 def start_auto_responder(channel: CallbackApprovalChannel):
     """Auto-approve or auto-deny pending requests (simulates a human)."""
+
     def loop():
         seen = set()
         for _ in range(120):
@@ -78,6 +89,7 @@ def start_auto_responder(channel: CallbackApprovalChannel):
                 else:
                     channel.approve(req.request_id, "operator@example.com", "auto-approve for demo")
                     print("  → ✓ Approved")
+
     threading.Thread(target=loop, daemon=True).start()
 
 
@@ -121,35 +133,43 @@ def run():
     print()
 
     # Case 1: Low risk (dev, isolated) → D-SAL 1 → auto-approved, no HITL
-    result = gate.evaluate(make_proposal(
-        target="host:dev-01",
-        blast_radius=BlastRadius.ISOLATED,
-        evidence=[EvidenceItem(source="monitor", content="CPU 99%", confidence=0.9)],
-        description="Restart nginx on dev host after memory leak detected by monitoring",
-    ))
+    result = gate.evaluate(
+        make_proposal(
+            target="host:dev-01",
+            blast_radius=BlastRadius.ISOLATED,
+            evidence=[EvidenceItem(source="monitor", content="CPU 99%", confidence=0.9)],
+            description="Restart nginx on dev host after memory leak detected by monitoring",
+        )
+    )
     show_result("D-SAL 1 (dev, isolated)    ", result)
 
     # Case 2: Medium risk (prod target) → D-SAL 2 → HITL required
-    result = gate.evaluate(make_proposal(
-        target="host:prod-web-01",
-        blast_radius=BlastRadius.LIMITED,
-        evidence=[
-            EvidenceItem(source="siem", content="Anomalous traffic on prod-web-01", confidence=0.91),
-            EvidenceItem(source="edr", content="Suspicious process spawn", confidence=0.87),
-        ],
-        description="Isolate prod-web-01 from network segment after SIEM alert. "
-                    "Two independent sensors confirm anomalous behavior.",
-    ))
+    result = gate.evaluate(
+        make_proposal(
+            target="host:prod-web-01",
+            blast_radius=BlastRadius.LIMITED,
+            evidence=[
+                EvidenceItem(
+                    source="siem", content="Anomalous traffic on prod-web-01", confidence=0.91
+                ),
+                EvidenceItem(source="edr", content="Suspicious process spawn", confidence=0.87),
+            ],
+            description="Isolate prod-web-01 from network segment after SIEM alert. "
+            "Two independent sensors confirm anomalous behavior.",
+        )
+    )
     show_result("D-SAL 2 (prod, HITL)      ", result)
 
     # Case 3: CRITICAL + irreversible → RuleEngine hard DENY
-    result = gate.evaluate(make_proposal(
-        target="host:prod-db-cluster",
-        blast_radius=BlastRadius.CRITICAL,
-        evidence=[EvidenceItem(source="monitor", content="high load", confidence=0.7)],
-        description="Emergency permanent shutdown of prod database cluster — cannot be undone",
-        reversibility=False,
-    ))
+    result = gate.evaluate(
+        make_proposal(
+            target="host:prod-db-cluster",
+            blast_radius=BlastRadius.CRITICAL,
+            evidence=[EvidenceItem(source="monitor", content="high load", confidence=0.7)],
+            description="Emergency permanent shutdown of prod database cluster — cannot be undone",
+            reversibility=False,
+        )
+    )
     show_result("CRITICAL+irreversible (deny)", result)
 
     print()

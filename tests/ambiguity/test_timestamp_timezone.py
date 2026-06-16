@@ -15,6 +15,7 @@ Covers:
 - canonical_hash stability across multiple calls
 - canonical_hash changes when fields change
 """
+
 from __future__ import annotations
 
 import os
@@ -44,6 +45,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import hashlib, base64, uuid
@@ -54,7 +56,13 @@ from ambiguity_fixtures import make_proposal, utcnow, future
 
 
 def _make_minimal_ado(issued_at: datetime | None = None, expires_at: datetime | None = None):
-    from shani.schemas.decision import AuthorizedDecisionObject, ExecContext, IntentBinding, DecisionType
+    from shani.schemas.decision import (
+        AuthorizedDecisionObject,
+        ExecContext,
+        IntentBinding,
+        DecisionType,
+    )
+
     kw = dict(
         decision_id=str(uuid.uuid4()),
         authorized_dsal=2,
@@ -76,6 +84,7 @@ def _make_minimal_ado(issued_at: datetime | None = None, expires_at: datetime | 
     if issued_at is not None:
         kw["issued_at"] = issued_at
     from shani.schemas.decision import AuthorizedDecisionObject
+
     return AuthorizedDecisionObject(**kw)
 
 
@@ -193,10 +202,12 @@ def test_is_expired_past_ado(suite: ConformanceSuite) -> None:
     suite._section("5b. is_expired() = True for past ADO")
     ado = _make_minimal_ado(expires_at=utcnow() + timedelta(seconds=60))
     # Force expires_at into the past without going through schema validation
-    expired_ado = ado.model_copy(update={
-        "issued_at": utcnow() - timedelta(seconds=120),
-        "expires_at": utcnow() - timedelta(seconds=60),
-    })
+    expired_ado = ado.model_copy(
+        update={
+            "issued_at": utcnow() - timedelta(seconds=120),
+            "expires_at": utcnow() - timedelta(seconds=60),
+        }
+    )
     suite.must_pass(
         "ts:expired_past",
         expired_ado.is_expired() is True,

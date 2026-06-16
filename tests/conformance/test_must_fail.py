@@ -14,6 +14,7 @@ Test cases:
     4. invalid_signature    — tampered signature field → verify_binding() False (SPEC §4.5)
     5. dsal_escalation      — child ADO cannot escalate beyond parent's max_child_dsal (SPEC §6.2)
 """
+
 from __future__ import annotations
 
 import os
@@ -27,6 +28,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -39,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, BlastRadius, DecisionType
@@ -48,9 +51,13 @@ from shani.security.replay_store import NonceAlreadyConsumed
 
 from framework import ConformanceSuite
 from fixtures import (
-    make_evaluator, make_proposal, make_valid_ado,
-    make_expired_ado, make_cross_org_ado,
-    future, past,
+    make_evaluator,
+    make_proposal,
+    make_valid_ado,
+    make_expired_ado,
+    make_cross_org_ado,
+    future,
+    past,
 )
 
 
@@ -64,7 +71,7 @@ def test_expired_ado(suite: ConformanceSuite) -> None:
 
     ev = make_evaluator()
     expired_ado = make_expired_ado(ev)
-    proposal    = make_proposal()
+    proposal = make_proposal()
 
     # is_expired() must be True
     suite.must_fail(
@@ -103,9 +110,9 @@ def test_expired_ado(suite: ConformanceSuite) -> None:
 def test_reused_ado_nonce(suite: ConformanceSuite) -> None:
     suite._section("2. Reused ADO Nonce (SPEC §5.4)")
 
-    ev      = make_evaluator()
+    ev = make_evaluator()
     proposal = make_proposal()
-    ado     = make_valid_ado(ev, proposal)
+    ado = make_valid_ado(ev, proposal)
 
     # First registration must succeed
     try:
@@ -199,7 +206,7 @@ def test_missing_propagated_constraints(suite: ConformanceSuite) -> None:
         )
     )
     parent_ev = make_evaluator(org_policy=org_policy)
-    child_ev  = make_evaluator(org_policy=org_policy)
+    child_ev = make_evaluator(org_policy=org_policy)
 
     # Issue parent ADO (no cross-org constraint propagation)
     # Use REMEDIATION (base D-SAL 1) — agent/conformance has granted_dsal=3,
@@ -210,10 +217,12 @@ def test_missing_propagated_constraints(suite: ConformanceSuite) -> None:
     parent_ado = make_valid_ado(parent_ev, parent_proposal)
 
     # Manually add origin_org but leave propagated_constraints empty
-    cross_org_parent = parent_ado.model_copy(update={
-        "origin_org": "org-alpha",
-        "propagated_constraints": [],
-    })
+    cross_org_parent = parent_ado.model_copy(
+        update={
+            "origin_org": "org-alpha",
+            "propagated_constraints": [],
+        }
+    )
 
     # Child proposal submitted to child evaluator under this cross-org parent
     child_proposal = make_proposal(
@@ -269,9 +278,9 @@ def test_missing_propagated_constraints(suite: ConformanceSuite) -> None:
 def test_invalid_signature(suite: ConformanceSuite) -> None:
     suite._section("4. Invalid Signature (SPEC §4.5)")
 
-    ev       = make_evaluator()
+    ev = make_evaluator()
     proposal = make_proposal()
-    ado      = make_valid_ado(ev, proposal)
+    ado = make_valid_ado(ev, proposal)
 
     # Baseline: valid ADO passes
     baseline_ok = ev.verify_binding(ado, proposal)
@@ -382,6 +391,7 @@ def test_dsal_escalation(suite: ConformanceSuite) -> None:
     from shani.schemas.decision import ExecContext, IntentBinding
     from datetime import datetime, timezone, timedelta
     import uuid
+
     escalation_blocked = False
     try:
         AuthorizedDecisionObject(
@@ -392,7 +402,7 @@ def test_dsal_escalation(suite: ConformanceSuite) -> None:
             authorized_dsal=2,
             delegation_rules=DelegationRules(
                 allowed_sub_decisions=["remediation"],
-                max_child_dsal=2,   # equal to authorized_dsal — MUST be rejected
+                max_child_dsal=2,  # equal to authorized_dsal — MUST be rejected
                 max_depth=1,
                 max_children=1,
             ),

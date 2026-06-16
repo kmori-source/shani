@@ -10,6 +10,7 @@ Covers T15 (Ambiguity Escalation) and T3/T4 (escalation prevention):
 - DelegationRules max_child_dsal < authorized_dsal invariant
 - Multiple AMBIGUOUS requests must not leak posture boundary details
 """
+
 from __future__ import annotations
 
 import os
@@ -39,6 +40,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest
@@ -52,7 +54,12 @@ from shani.schemas.decision import (
     ExecContext,
     IntentBinding,
 )
-from shani.schemas.posture import PostureOutcome, PostureRefinementRequest, UserPosture, PostureConstraints
+from shani.schemas.posture import (
+    PostureOutcome,
+    PostureRefinementRequest,
+    UserPosture,
+    PostureConstraints,
+)
 from shani.authority.dsal_calculator import DSALCalculator
 from shani.posture.engine import PostureEngine
 
@@ -168,6 +175,7 @@ def test_requested_dsal_field_absent(suite: ConformanceSuite) -> None:
     """DecisionProposal must not have a requested_dsal field (T3 mitigation)."""
     suite._section("2. requested_dsal field absent from DecisionProposal (T3)")
     import pathlib
+
     proposal = make_proposal()
     suite.must_fail(
         "dsal:no_requested_dsal_attr",

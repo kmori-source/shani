@@ -3,6 +3,7 @@ tests/propagation/conftest.py
 
 pytest fixtures for the propagation test suite.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,7 +12,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../conformance"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.modules.pop('fixtures', None)
+sys.modules.pop("fixtures", None)
 
 try:
     import pydantic  # noqa: F401
@@ -32,6 +33,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pytest

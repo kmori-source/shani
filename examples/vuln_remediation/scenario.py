@@ -139,7 +139,9 @@ def run_scan() -> list[VulnFinding]:
 
     _order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     findings.sort(key=lambda f: _order.get(f.severity, 4))
-    print(f"  {len(findings)} vulnerability finding(s) across {len(data.get('dependencies', []))} packages")
+    print(
+        f"  {len(findings)} vulnerability finding(s) across {len(data.get('dependencies', []))} packages"
+    )
     return findings
 
 
@@ -160,10 +162,17 @@ def _cvss_to_severity(score: float | None) -> str:
 # ---------------------------------------------------------------------------
 
 _SEVERITY_BLAST: dict[str, BlastRadius] = {
+<<<<<<< Updated upstream
     "CRITICAL": BlastRadius.SIGNIFICANT,
     "HIGH":     BlastRadius.LIMITED,
     "MEDIUM":   BlastRadius.ISOLATED,
     "LOW":      BlastRadius.ISOLATED,
+=======
+    "CRITICAL": BlastRadius.CRITICAL,  # D-SAL 3-4, always requires HITL
+    "HIGH": BlastRadius.SIGNIFICANT,  # D-SAL 2-3, requires HITL
+    "MEDIUM": BlastRadius.LIMITED,  # D-SAL 2, requires HITL
+    "LOW": BlastRadius.ISOLATED,  # D-SAL 1, auto-approved
+>>>>>>> Stashed changes
 }
 
 
@@ -237,10 +246,15 @@ def remediate(
             entries.append(
                 RemediationEntry(
                     timestamp=ts,
-                    vuln_id=f.vuln_id, package=f.package,
-                    installed_version=f.installed_version, fix_version=None,
-                    severity=f.severity, action="skipped",
-                    proposal_id=None, ado_id=None, approved_by=None,
+                    vuln_id=f.vuln_id,
+                    package=f.package,
+                    installed_version=f.installed_version,
+                    fix_version=None,
+                    severity=f.severity,
+                    action="skipped",
+                    proposal_id=None,
+                    ado_id=None,
+                    approved_by=None,
                     detail="No fix version available",
                 )
             )
@@ -255,10 +269,15 @@ def remediate(
             entries.append(
                 RemediationEntry(
                     timestamp=ts,
-                    vuln_id=f.vuln_id, package=f.package,
-                    installed_version=f.installed_version, fix_version=f.fix_version,
-                    severity=f.severity, action="denied",
-                    proposal_id=str(proposal.decision_id), ado_id=None, approved_by=None,
+                    vuln_id=f.vuln_id,
+                    package=f.package,
+                    installed_version=f.installed_version,
+                    fix_version=f.fix_version,
+                    severity=f.severity,
+                    action="denied",
+                    proposal_id=str(proposal.decision_id),
+                    ado_id=None,
+                    approved_by=None,
                     detail=summary["reason"],
                 )
             )
@@ -271,8 +290,10 @@ def remediate(
             entries.append(
                 RemediationEntry(
                     timestamp=ts,
-                    vuln_id=f.vuln_id, package=f.package,
-                    installed_version=f.installed_version, fix_version=f.fix_version,
+                    vuln_id=f.vuln_id,
+                    package=f.package,
+                    installed_version=f.installed_version,
+                    fix_version=f.fix_version,
                     severity=f.severity,
                     action="dry-run" if dry_run else "executed",
                     proposal_id=str(proposal.decision_id),
@@ -321,8 +342,8 @@ def build_graph(gate: HITLGate, dry_run: bool):
 
 def write_audit(entries: list[RemediationEntry], path: Path, mode: str) -> None:
     executed = sum(1 for e in entries if e.action == "executed")
-    denied   = sum(1 for e in entries if e.action == "denied")
-    skipped  = sum(1 for e in entries if e.action in ("skipped", "dry-run"))
+    denied = sum(1 for e in entries if e.action == "denied")
+    skipped = sum(1 for e in entries if e.action in ("skipped", "dry-run"))
 
     audit = {
         "schema_version": "1",
@@ -348,15 +369,18 @@ def write_audit(entries: list[RemediationEntry], path: Path, mode: str) -> None:
 
 
 def main() -> None:
-    auto     = os.getenv("SHANI_HITL_AUTO", "0") == "1"
-    dry_run  = os.getenv("SHANI_DRY_RUN",   "0") == "1"
-    use_lg   = os.getenv("USE_LANGGRAPH",    "0") == "1"
+    auto = os.getenv("SHANI_HITL_AUTO", "0") == "1"
+    dry_run = os.getenv("SHANI_DRY_RUN", "0") == "1"
+    use_lg = os.getenv("USE_LANGGRAPH", "0") == "1"
     audit_path = Path(os.getenv("AUDIT_OUTPUT", "audit.json"))
 
     mode_parts = []
-    if auto:    mode_parts.append("auto")
-    if dry_run: mode_parts.append("dry-run")
-    if use_lg:  mode_parts.append("langgraph")
+    if auto:
+        mode_parts.append("auto")
+    if dry_run:
+        mode_parts.append("dry-run")
+    if use_lg:
+        mode_parts.append("langgraph")
     mode = "+".join(mode_parts) if mode_parts else "manual"
 
     print("=" * 60)
@@ -365,7 +389,7 @@ def main() -> None:
     print(f"  mode={mode}  audit={audit_path}")
 
     # Shani governance setup
-    policy    = DecisionPolicyProvider.from_yaml(_POLICY_PATH)
+    policy = DecisionPolicyProvider.from_yaml(_POLICY_PATH)
     authority = StaticAuthorityProvider(max_dsal=3)
     evaluator = ShaniEvaluator(authority_provider=authority, decision_policy=policy)
 

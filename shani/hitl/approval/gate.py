@@ -107,7 +107,7 @@ class HITLGate:
         self._timeout_minutes = timeout_minutes
         self._poll_interval = poll_interval_seconds
         self._timeout_is_deny = timeout_is_deny
-        self._pending: dict[str, ApprovalRequest] = {}   # request_id → request
+        self._pending: dict[str, ApprovalRequest] = {}  # request_id → request
 
     @property
     def dis(self):
@@ -130,8 +130,10 @@ class HITLGate:
 
         logger.info(
             "HITL required | decision=%s dsal=%d authority=%s timeout=%s",
-            req.decision_id[:8], req.effective_dsal if hasattr(req, "effective_dsal") else "?", 
-            req.required_authority, req.timeout_at.strftime("%H:%M UTC"),
+            req.decision_id[:8],
+            req.effective_dsal if hasattr(req, "effective_dsal") else "?",
+            req.required_authority,
+            req.timeout_at.strftime("%H:%M UTC"),
         )
         self._channel.send(req)
 
@@ -152,7 +154,9 @@ class HITLGate:
         req = self._build_request(proposal)
         self._pending[req.request_id] = req
         self._channel.send(req)
-        logger.info("HITL submitted | request=%s decision=%s", req.request_id[:8], req.decision_id[:8])
+        logger.info(
+            "HITL submitted | request=%s decision=%s", req.request_id[:8], req.decision_id[:8]
+        )
         return req.request_id
 
     def collect(self, request_id: str, proposal: DecisionProposal) -> EvaluationResult:
@@ -234,14 +238,18 @@ class HITLGate:
         if req.status == ApprovalStatus.APPROVED:
             logger.info(
                 "HITL APPROVED | by=%s decision=%s note=%s",
-                req.decided_by, req.decision_id[:8], req.decision_note,
+                req.decided_by,
+                req.decision_id[:8],
+                req.decision_note,
             )
             return self._evaluator.evaluate(proposal)
 
         elif req.status == ApprovalStatus.DENIED:
             logger.warning(
                 "HITL DENIED | by=%s decision=%s reason=%s",
-                req.decided_by, req.decision_id[:8], req.decision_note,
+                req.decided_by,
+                req.decision_id[:8],
+                req.decision_note,
             )
             return DeniedDecision(
                 decision_id=proposal.decision_id,
@@ -251,12 +259,14 @@ class HITLGate:
 
         else:  # TIMEOUT or REVOKED
             logger.warning("HITL TIMEOUT | decision=%s", req.decision_id[:8])
-            self._evaluator.process_integrity_signal(IntegritySignal(
-                signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
-                source="shani-hitl",
-                decision_id=proposal.decision_id,
-                detail=f"HITL approval timed out for {proposal.decision_type.value} on {proposal.target}",
-            ))
+            self._evaluator.process_integrity_signal(
+                IntegritySignal(
+                    signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
+                    source="shani-hitl",
+                    decision_id=proposal.decision_id,
+                    detail=f"HITL approval timed out for {proposal.decision_type.value} on {proposal.target}",
+                )
+            )
             return DeniedDecision(
                 decision_id=proposal.decision_id,
                 reason=f"HITL approval timed out after {self._timeout_minutes} minutes.",
@@ -270,20 +280,20 @@ class HITLGate:
         """
         try:
             ev = self._evaluator
-            if hasattr(ev, '_policy') and hasattr(ev, '_risk_pipeline'):
+            if hasattr(ev, "_policy") and hasattr(ev, "_risk_pipeline"):
                 base = ev._policy.required_dsal(proposal.decision_type)
                 pr = ev._risk_pipeline.evaluate(proposal, base)
                 return pr.effective_dsal
-            elif hasattr(ev, '_evaluator'):
+            elif hasattr(ev, "_evaluator"):
                 inner = ev._evaluator
-                if hasattr(inner, '_policy') and hasattr(inner, '_risk_pipeline'):
+                if hasattr(inner, "_policy") and hasattr(inner, "_risk_pipeline"):
                     base = inner._policy.required_dsal(proposal.decision_type)
                     pr = inner._risk_pipeline.evaluate(proposal, base)
                     return pr.effective_dsal
         except Exception:
             pass
         # Fallback: base_dsal from policy
-        if hasattr(self._evaluator, '_policy'):
+        if hasattr(self._evaluator, "_policy"):
             return self._evaluator._policy.required_dsal(proposal.decision_type)
         return 1
 
@@ -293,14 +303,19 @@ class HITLGate:
 
     def _build_request(self, proposal: DecisionProposal) -> ApprovalRequest:
         from datetime import timedelta
+
         # determines the authority role using the context-aware effective D-SAL
         effective_dsal = self._get_effective_dsal(proposal)
 
         authority_label = "unknown"
-        if hasattr(self._evaluator, '_authority'):
+        if hasattr(self._evaluator, "_authority"):
             authority_label = self._evaluator._authority.resolve_authority(effective_dsal)
-        elif hasattr(self._evaluator, '_evaluator') and hasattr(self._evaluator._evaluator, '_authority'):
-            authority_label = self._evaluator._evaluator._authority.resolve_authority(effective_dsal)
+        elif hasattr(self._evaluator, "_evaluator") and hasattr(
+            self._evaluator._evaluator, "_authority"
+        ):
+            authority_label = self._evaluator._evaluator._authority.resolve_authority(
+                effective_dsal
+            )
 
         return ApprovalRequest(
             decision_id=proposal.decision_id,

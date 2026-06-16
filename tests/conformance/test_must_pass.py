@@ -14,6 +14,7 @@ Test cases:
     3. dis_transition_handling    — DIS state transitions are valid; VIOLATED blocks execution;
                                     reset_to_valid() requires justification (SPEC §4.4)
 """
+
 from __future__ import annotations
 
 import os
@@ -27,6 +28,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -39,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision
@@ -50,7 +53,10 @@ from shani.security.replay_store import NonceAlreadyConsumed, InMemoryNonceStore
 
 from framework import ConformanceSuite
 from fixtures import (
-    make_evaluator, make_proposal, make_valid_ado, make_user_posture,
+    make_evaluator,
+    make_proposal,
+    make_valid_ado,
+    make_user_posture,
 )
 
 
@@ -68,7 +74,7 @@ def test_valid_posture_refinement(suite: ConformanceSuite) -> None:
             return PostureOutcome.AMBIGUOUS, ["target_scope"], ["minimum_evidence"]
 
     posture = make_user_posture()
-    engine  = AmbiguousPostureEngine(posture)
+    engine = AmbiguousPostureEngine(posture)
     proposal = make_proposal()
     outcome, req = engine.evaluate(proposal)
 
@@ -113,8 +119,7 @@ def test_valid_posture_refinement(suite: ConformanceSuite) -> None:
         suite.must_pass(
             "posture_refinement:has_matched_and_unresolved",
             condition=(
-                isinstance(req.matched_constraints, list)
-                and isinstance(req.unresolved, list)
+                isinstance(req.matched_constraints, list) and isinstance(req.unresolved, list)
             ),
             description="PostureRefinementRequest has matched_constraints and unresolved lists",
             spec_ref="SPEC §8.5",
@@ -122,6 +127,7 @@ def test_valid_posture_refinement(suite: ConformanceSuite) -> None:
 
     # PostureRefinementRequest must NOT be a DeniedDecision
     from shani.core.evaluator import DeniedDecision as DD
+
     not_denied = not isinstance(req, DD)
     suite.must_pass(
         "posture_refinement:not_denied_decision",
@@ -145,13 +151,13 @@ def test_valid_posture_refinement(suite: ConformanceSuite) -> None:
         )
 
     # Valid PASS path: proposal within posture constraints must produce PASS
-    broad_posture  = make_user_posture(
+    broad_posture = make_user_posture(
         target_scope="host:dev-.*",
         max_blast_radius="limited",
         reversibility_required=True,
         minimum_evidence=1,
     )
-    pass_engine   = PostureEngine(broad_posture)
+    pass_engine = PostureEngine(broad_posture)
     valid_proposal = make_proposal(target="host:dev-42")
     pass_outcome, pass_req = pass_engine.evaluate(valid_proposal)
 
@@ -185,8 +191,8 @@ def test_proper_replay_rejection(suite: ConformanceSuite) -> None:
     suite._section("2. Proper Replay Rejection (SPEC §5.4)")
 
     nonce_store = InMemoryNonceStore()
-    ev          = make_evaluator(nonce_store=nonce_store)
-    proposal    = make_proposal()
+    ev = make_evaluator(nonce_store=nonce_store)
+    proposal = make_proposal()
 
     # Issue valid ADO — must succeed
     ado = ev.evaluate(proposal)

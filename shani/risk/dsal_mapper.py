@@ -30,12 +30,13 @@ from .assessor import RiskScore
 @dataclass(frozen=True)
 class DSALMapping:
     """D-SAL mapping result and breakdown。"""
-    effective_dsal:   int
-    base_dsal:        int           # from decision_type policy
-    risk_based_dsal:  int           # derived from risk_score
-    risk_score:       float
-    risk_score_detail: str          # summary for explain()
-    binding:          str           # which bound applied ("base" or "risk") ("base" | "risk")
+
+    effective_dsal: int
+    base_dsal: int  # from decision_type policy
+    risk_based_dsal: int  # derived from risk_score
+    risk_score: float
+    risk_score_detail: str  # summary for explain()
+    binding: str  # which bound applied ("base" or "risk") ("base" | "risk")
 
     def explain(self) -> str:
         return (
@@ -50,10 +51,10 @@ class DSALMapping:
 
 # Default threshold table (overridable in policy.yaml)
 DEFAULT_THRESHOLDS: list[tuple[float, int]] = [
-    (0.30, 1),   # risk < 0.30 → D-SAL 1
-    (0.50, 2),   # risk < 0.50 → D-SAL 2
-    (0.70, 3),   # risk < 0.70 → D-SAL 3
-    (1.01, 4),   # risk >= 0.70 → D-SAL 4
+    (0.30, 1),  # risk < 0.30 → D-SAL 1
+    (0.50, 2),  # risk < 0.50 → D-SAL 2
+    (0.70, 3),  # risk < 0.70 → D-SAL 3
+    (1.01, 4),  # risk >= 0.70 → D-SAL 4
 ]
 
 

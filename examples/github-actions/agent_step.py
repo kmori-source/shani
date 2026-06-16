@@ -13,30 +13,42 @@ The agent:
 Run:
     python agent_step.py
 """
+
 from __future__ import annotations
 
 import json
 import os
 import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _s = _iu.spec_from_file_location("_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _m = _iu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    _s = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _m = _iu.module_from_spec(_s)
+    _s.loader.exec_module(_m)
     _sh = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"): setattr(_sh, _k, getattr(_m, _k))
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
+        setattr(_sh, _k, getattr(_m, _k))
     sys.modules["pydantic"] = _sh
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 
 from shani import (
-    ShaniEvaluator, StaticAuthorityProvider,
-    DecisionType, BlastRadius, DeniedDecision,
+    ShaniEvaluator,
+    StaticAuthorityProvider,
+    DecisionType,
+    BlastRadius,
+    DeniedDecision,
 )
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
@@ -47,9 +59,9 @@ def build_evaluator() -> ShaniEvaluator:
         "release-bot/v1": AgentIdentity(
             agent_id="release-bot/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                "configuration_change", "remediation", "network_action"
-            ]),
+            allowed_decision_types=frozenset(
+                ["configuration_change", "remediation", "network_action"]
+            ),
         )
     }
     return ShaniEvaluator(
@@ -99,7 +111,9 @@ def main() -> int:
 
     print(f"  Agent: {proposal.proposed_by}")
     print(f"  Action: {proposal.decision_type.value} on {proposal.target}")
-    print(f"  Risk: blast_radius={proposal.blast_radius.value}, reversible={proposal.reversibility}")
+    print(
+        f"  Risk: blast_radius={proposal.blast_radius.value}, reversible={proposal.reversibility}"
+    )
     print(f"  Evidence: {len(proposal.evidence)} sources")
     print()
 

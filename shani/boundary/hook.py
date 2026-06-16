@@ -58,21 +58,21 @@ class DenialContext:
         self,
         reason: str,
         decision_id: str | None = None,
-        pipeline_result=None,       # PipelineResult (risk_score, rules, evidence, framing)
-        proposal=None,              # snapshot of the DecisionProposal
+        pipeline_result=None,  # PipelineResult (risk_score, rules, evidence, framing)
+        proposal=None,  # snapshot of the DecisionProposal
         rule_name: str | None = None,
         risk_score: float | None = None,
         evidence_quality: float | None = None,
         framing_risk: float | None = None,
     ):
-        self.reason           = reason
-        self.decision_id      = decision_id
-        self.pipeline_result  = pipeline_result
-        self.proposal         = proposal
-        self.rule_name        = rule_name
-        self.risk_score       = risk_score
+        self.reason = reason
+        self.decision_id = decision_id
+        self.pipeline_result = pipeline_result
+        self.proposal = proposal
+        self.rule_name = rule_name
+        self.risk_score = risk_score
         self.evidence_quality = evidence_quality
-        self.framing_risk     = framing_risk
+        self.framing_risk = framing_risk
 
     def to_human_summary(self) -> dict:
         """
@@ -94,8 +94,7 @@ class DenialContext:
         if self.pipeline_result is not None:
             pr = self.pipeline_result
             summary["risk_dimensions"] = {
-                d.name: round(d.score, 3)
-                for d in pr.risk_score.dimensions
+                d.name: round(d.score, 3) for d in pr.risk_score.dimensions
             }
             if pr.rule_result.applied_rules:
                 summary["rules_applied"] = pr.rule_result.applied_rules
@@ -104,11 +103,11 @@ class DenialContext:
         if self.proposal is not None:
             summary["proposal_snapshot"] = {
                 "decision_type": self.proposal.decision_type.value,
-                "target":        self.proposal.target,
-                "blast_radius":  self.proposal.blast_radius.value,
+                "target": self.proposal.target,
+                "blast_radius": self.proposal.blast_radius.value,
                 "reversibility": self.proposal.reversibility,
                 "evidence_count": len(self.proposal.evidence),
-                "confidence":    self.proposal.confidence,
+                "confidence": self.proposal.confidence,
             }
         return summary
 
@@ -188,9 +187,7 @@ class DecisionFirewall:
                     "but it is not in the active firewall chain."
                 )
             if parent_node.depth + 1 > self._max_depth:
-                raise DecisionBoundaryViolation(
-                    f"Chain depth exceeds max {self._max_depth}."
-                )
+                raise DecisionBoundaryViolation(f"Chain depth exceeds max {self._max_depth}.")
             # Note: D-SAL escalation check is performed inside evaluator._check_delegation_rules_eff
 
         result = self._evaluator.evaluate(proposal)
@@ -202,7 +199,9 @@ class DecisionFirewall:
         if isinstance(result, PostureRefinementRequest):
             logger.info(
                 "Firewall POSTURE-AMBIGUOUS | agent=%s proposal=%s principal=%s",
-                agent_id, result.proposal_id, result.principal_id,
+                agent_id,
+                result.proposal_id,
+                result.principal_id,
             )
             # SPEC §8.5 behavior 2: notify principal via a separate channel (not HITL)
             if self._principal_notifier is not None:
@@ -210,12 +209,15 @@ class DecisionFirewall:
                     self._principal_notifier(result)
                     logger.info(
                         "Principal notified | principal=%s proposal=%s",
-                        result.principal_id, result.proposal_id,
+                        result.principal_id,
+                        result.proposal_id,
                     )
                 except Exception as notify_exc:
                     logger.error(
                         "Principal notifier failed | principal=%s error=%s",
-                        result.principal_id, notify_exc, exc_info=True,
+                        result.principal_id,
+                        notify_exc,
+                        exc_info=True,
                     )
             else:
                 logger.warning(
@@ -234,7 +236,12 @@ class DecisionFirewall:
 
         node = DecisionChainNode(agent_id=agent_id, ado=result, parent_node=parent_node)
         self._active_nodes[result.decision_id] = node
-        logger.info("Firewall ENTER | agent=%s dsal=%s depth=%d", agent_id, result.authorized_dsal, node.depth)
+        logger.info(
+            "Firewall ENTER | agent=%s dsal=%s depth=%d",
+            agent_id,
+            result.authorized_dsal,
+            node.depth,
+        )
         return result
 
     def exit(self, decision_id: str, result: Any = None, success: bool = True) -> DecisionChainNode:
@@ -261,6 +268,7 @@ class DecisionFirewall:
             if datetime.now(tz=timezone.utc) > ado.expires_at:
                 raise DecisionBoundaryViolation(f"ADO {ado.decision_id} expired.")
             return fn(ado, *args, **kwargs)
+
         return wrapper  # type: ignore[return-value]
 
     def active_chain_summary(self) -> list[dict[str, Any]]:
@@ -281,15 +289,19 @@ class DecisionFirewall:
         trail = []
         for node in self._completed:
             for hop in node.lineage():
-                trail.append({
-                    "decision_id": hop.ado.decision_id,
-                    "agent_id": hop.agent_id,
-                    "decision_type": hop.ado.decision_type.value,
-                    "target": hop.ado.intent_binding.target,
-                    "dsal": hop.ado.authorized_dsal,
-                    "depth": hop.depth,
-                    "parent_decision_id": hop.parent_node.ado.decision_id if hop.parent_node else None,
-                })
+                trail.append(
+                    {
+                        "decision_id": hop.ado.decision_id,
+                        "agent_id": hop.agent_id,
+                        "decision_type": hop.ado.decision_type.value,
+                        "target": hop.ado.intent_binding.target,
+                        "dsal": hop.ado.authorized_dsal,
+                        "depth": hop.depth,
+                        "parent_decision_id": hop.parent_node.ado.decision_id
+                        if hop.parent_node
+                        else None,
+                    }
+                )
         return trail
 
 
@@ -312,7 +324,9 @@ class DecisionBoundary:
             # SPEC §8.5: log, notify principal, and return — caller must halt
             logger.info(
                 "PostureRefinementRequest | proposal=%s principal=%s ambiguity=%s",
-                result.proposal_id, result.principal_id, result.ambiguity,
+                result.proposal_id,
+                result.principal_id,
+                result.ambiguity,
             )
             # SPEC §8.5 behavior 2: notify principal via a separate channel (not HITL)
             if self._principal_notifier is not None:
@@ -320,12 +334,15 @@ class DecisionBoundary:
                     self._principal_notifier(result)
                     logger.info(
                         "Principal notified | principal=%s proposal=%s",
-                        result.principal_id, result.proposal_id,
+                        result.principal_id,
+                        result.proposal_id,
                     )
                 except Exception as notify_exc:
                     logger.error(
                         "Principal notifier failed | principal=%s error=%s",
-                        result.principal_id, notify_exc, exc_info=True,
+                        result.principal_id,
+                        notify_exc,
+                        exc_info=True,
                     )
             else:
                 logger.warning(
@@ -351,4 +368,5 @@ class DecisionBoundary:
             result = fn(ado, *args, **kwargs)
             self._evaluator.register_executed(ado)
             return result
+
         return wrapper  # type: ignore[return-value]

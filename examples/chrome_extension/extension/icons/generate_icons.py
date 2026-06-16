@@ -2,6 +2,7 @@
 Run this script once to generate the PNG icon files for the Chrome extension.
 Usage: python3 generate_icons.py
 """
+
 import struct
 import zlib
 import os

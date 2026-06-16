@@ -1,4 +1,5 @@
 """shani check — Quick end-to-end ADO issuance and replay-prevention check."""
+
 from __future__ import annotations
 
 import sys
@@ -9,8 +10,11 @@ def cmd_check() -> int:
     from datetime import datetime, timedelta, timezone
 
     from shani import (
-        ShaniEvaluator, StaticAuthorityProvider,
-        DecisionType, BlastRadius, DeniedDecision,
+        ShaniEvaluator,
+        StaticAuthorityProvider,
+        DecisionType,
+        BlastRadius,
+        DeniedDecision,
     )
     from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
     from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
@@ -19,13 +23,15 @@ def cmd_check() -> int:
     print("  shani check — Quick End-to-End Verification")
     print("═" * 60)
 
-    policy = DecisionPolicyProvider(agent_registry={
-        "test-agent/v1": AgentIdentity(
-            agent_id="test-agent/v1",
-            granted_dsal=2,
-            allowed_decision_types=frozenset(["remediation"]),
-        )
-    })
+    policy = DecisionPolicyProvider(
+        agent_registry={
+            "test-agent/v1": AgentIdentity(
+                agent_id="test-agent/v1",
+                granted_dsal=2,
+                allowed_decision_types=frozenset(["remediation"]),
+            )
+        }
+    )
     evaluator = ShaniEvaluator(
         authority_provider=StaticAuthorityProvider(max_dsal=3),
         decision_policy=policy,

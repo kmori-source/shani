@@ -8,6 +8,7 @@ Provides:
   - make_expired_ado(): return an ADO with expires_at in the past
   - make_cross_org_ado(): return a cross-org ADO with propagated_constraints
 """
+
 from __future__ import annotations
 
 import os
@@ -22,6 +23,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -34,6 +36,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, DeniedDecision, DecisionType
@@ -55,7 +58,9 @@ def _past(seconds: int = 10) -> datetime:
 # ---------------------------------------------------------------------------
 
 
-def make_valid_ado(evaluator: ShaniEvaluator, proposal: DecisionProposal) -> AuthorizedDecisionObject:
+def make_valid_ado(
+    evaluator: ShaniEvaluator, proposal: DecisionProposal
+) -> AuthorizedDecisionObject:
     """Evaluate a proposal and return the ADO, raising if denied."""
     result = evaluator.evaluate(proposal)
     if isinstance(result, DeniedDecision):
@@ -75,10 +80,12 @@ def make_expired_ado(evaluator: ShaniEvaluator) -> AuthorizedDecisionObject:
     proposal = make_proposal()
     ado = make_valid_ado(evaluator, proposal)
     expired_at = _past(seconds=5)
-    return ado.model_copy(update={
-        "issued_at": _past(seconds=60),
-        "expires_at": expired_at,
-    })
+    return ado.model_copy(
+        update={
+            "issued_at": _past(seconds=60),
+            "expires_at": expired_at,
+        }
+    )
 
 
 def make_cross_org_ado(
@@ -91,8 +98,14 @@ def make_cross_org_ado(
         origin_org="org-alpha",
     )
     ado = make_valid_ado(evaluator, proposal)
-    constraints = ["target_scope:domestic-only", "max_blast_radius:limited"] if with_propagated_constraints else []
-    return ado.model_copy(update={
-        "origin_org": "org-alpha",
-        "propagated_constraints": constraints,
-    })
+    constraints = (
+        ["target_scope:domestic-only", "max_blast_radius:limited"]
+        if with_propagated_constraints
+        else []
+    )
+    return ado.model_copy(
+        update={
+            "origin_org": "org-alpha",
+            "propagated_constraints": constraints,
+        }
+    )

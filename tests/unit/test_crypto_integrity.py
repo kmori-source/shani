@@ -9,54 +9,84 @@ Covers:
   - DIS state machine transitions
   - IntegrityMonitor signal processing
 """
+
 from __future__ import annotations
 
 import os, sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"):
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 
 from shani import (
-    ShaniEvaluator, DeniedDecision,
-    StaticAuthorityProvider, DISStateMachine, DIS,
-    DecisionType, BlastRadius,
+    ShaniEvaluator,
+    DeniedDecision,
+    StaticAuthorityProvider,
+    DISStateMachine,
+    DIS,
+    DecisionType,
+    BlastRadius,
 )
 from shani.authority.policy import DecisionPolicyProvider, AgentIdentity
 from shani.schemas.decision import DecisionProposal, DecisionScope, EvidenceItem
 from shani.integrity.monitor import (
-    DISIntegrityMonitor, IntegritySignal, IntegritySignalType, SignalSeverity,
+    DISIntegrityMonitor,
+    IntegritySignal,
+    IntegritySignalType,
+    SignalSeverity,
 )
 
 PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures: list[str] = []
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
-def future(): return datetime.now(tz=timezone.utc) + timedelta(hours=1)
+
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
+
+
+def future():
+    return datetime.now(tz=timezone.utc) + timedelta(hours=1)
 
 
 def make_evaluator(max_dsal=3, dis=None):
-    agents = {"a/v1": AgentIdentity(
-        agent_id="a/v1", granted_dsal=3,
-        allowed_decision_types=frozenset([
-            "remediation", "configuration_change", "network_action", "data_access"
-        ])
-    )}
+    agents = {
+        "a/v1": AgentIdentity(
+            agent_id="a/v1",
+            granted_dsal=3,
+            allowed_decision_types=frozenset(
+                ["remediation", "configuration_change", "network_action", "data_access"]
+            ),
+        )
+    }
     return ShaniEvaluator(
         authority_provider=StaticAuthorityProvider(max_dsal=max_dsal),
         decision_policy=DecisionPolicyProvider(agent_registry=agents),
@@ -72,9 +102,11 @@ def make_proposal(**kw):
         target="host:dev-01",
         scope=DecisionScope(),
         evidence=[EvidenceItem(source="monitor", content="CPU 99%", confidence=0.9)],
-        confidence=0.9, reversibility=True,
+        confidence=0.9,
+        reversibility=True,
         blast_radius=BlastRadius.LIMITED,
-        delegation=False, expires_at=future(),
+        delegation=False,
+        expires_at=future(),
     )
     defaults.update(kw)
     return DecisionProposal(**defaults)
@@ -83,6 +115,7 @@ def make_proposal(**kw):
 # ─────────────────────────────────────────────────────────────────────────────
 # Signature integrity
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_signature_deterministic():
     section("Signature is deterministic (same ADO → same signature)")
@@ -150,13 +183,14 @@ def test_verify_binding_false_with_wrong_proposal():
     assert not isinstance(ado, DeniedDecision)
 
     assert ev.verify_binding(ado, p_real)
-    assert not ev.verify_binding(ado, p_fake)   # hash mismatch
+    assert not ev.verify_binding(ado, p_fake)  # hash mismatch
     ok("verify_binding(ado, wrong_proposal) = False")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DIS state machine
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_dis_starts_valid():
     section("DIS starts in VALID state")
@@ -169,12 +203,14 @@ def test_dis_valid_to_degraded():
     section("ASSUMPTION_DRIFT(MEDIUM) → VALID to DEGRADED")
     dis = DISStateMachine()
     monitor = DISIntegrityMonitor(dis)
-    monitor.process(IntegritySignal(
-        signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
-        source="test",
-        decision_id="dec-001",
-        detail="drift detected",
-    ))
+    monitor.process(
+        IntegritySignal(
+            signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
+            source="test",
+            decision_id="dec-001",
+            detail="drift detected",
+        )
+    )
     assert dis.state == DIS.DEGRADED
     ok("VALID → DEGRADED on ASSUMPTION_DRIFT")
 
@@ -183,12 +219,14 @@ def test_dis_to_violated_on_identity_drift():
     section("AGENT_IDENTITY_DRIFT(HIGH) → VIOLATED")
     dis = DISStateMachine()
     monitor = DISIntegrityMonitor(dis)
-    monitor.process(IntegritySignal(
-        signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
-        source="test",
-        decision_id="dec-001",
-        detail="identity change detected",
-    ))
+    monitor.process(
+        IntegritySignal(
+            signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
+            source="test",
+            decision_id="dec-001",
+            detail="identity change detected",
+        )
+    )
     assert dis.state == DIS.VIOLATED
     ok("VALID → VIOLATED on AGENT_IDENTITY_DRIFT")
 
@@ -199,12 +237,14 @@ def test_dis_violated_denies_all_proposals():
     ev = make_evaluator(dis=dis)
 
     # Trigger VIOLATED
-    ev.process_integrity_signal(IntegritySignal(
-        signal_type=IntegritySignalType.REPLAY_ATTACK,
-        source="test",
-        decision_id="dec-001",
-        detail="replay detected",
-    ))
+    ev.process_integrity_signal(
+        IntegritySignal(
+            signal_type=IntegritySignalType.REPLAY_ATTACK,
+            source="test",
+            decision_id="dec-001",
+            detail="replay detected",
+        )
+    )
     assert dis.state == DIS.VIOLATED
 
     result = ev.evaluate(make_proposal())
@@ -216,12 +256,14 @@ def test_dis_reset_requires_justification():
     section("DIS reset from VIOLATED requires justification + authority")
     dis = DISStateMachine()
     monitor = DISIntegrityMonitor(dis)
-    monitor.process(IntegritySignal(
-        signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
-        source="test",
-        decision_id="dec-001",
-        detail="breach",
-    ))
+    monitor.process(
+        IntegritySignal(
+            signal_type=IntegritySignalType.AGENT_IDENTITY_DRIFT,
+            source="test",
+            decision_id="dec-001",
+            detail="breach",
+        )
+    )
     assert dis.state == DIS.VIOLATED
 
     # Reset with proper justification
@@ -239,17 +281,25 @@ def test_dis_replay_attack_immediate_violated():
     monitor = DISIntegrityMonitor(dis)
 
     # First go to DEGRADED
-    monitor.process(IntegritySignal(
-        signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
-        source="test", decision_id="dec-001", detail="drift",
-    ))
+    monitor.process(
+        IntegritySignal(
+            signal_type=IntegritySignalType.ASSUMPTION_DRIFT,
+            source="test",
+            decision_id="dec-001",
+            detail="drift",
+        )
+    )
     assert dis.state == DIS.DEGRADED
 
     # REPLAY_ATTACK from DEGRADED → VIOLATED immediately
-    monitor.process(IntegritySignal(
-        signal_type=IntegritySignalType.REPLAY_ATTACK,
-        source="test", decision_id="dec-002", detail="replay",
-    ))
+    monitor.process(
+        IntegritySignal(
+            signal_type=IntegritySignalType.REPLAY_ATTACK,
+            source="test",
+            decision_id="dec-002",
+            detail="replay",
+        )
+    )
     assert dis.state == DIS.VIOLATED
     ok("REPLAY_ATTACK from DEGRADED → VIOLATED immediately")
 
@@ -279,7 +329,8 @@ if __name__ == "__main__":
     print("\n" + "=" * 58)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
+        for f in _failures:
+            print(f"    • {f}")
         sys.exit(1)
     else:
         print("  All tests passed.")

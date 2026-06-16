@@ -47,10 +47,11 @@ from ..schemas.decision import DecisionProposal, BlastRadius
 @dataclass(frozen=True)
 class DSALCalculation:
     """calculation result and breakdown。"""
-    effective: int             # final effective D-SAL
-    base: int                  # base value from policy
-    modifiers: list[str]       # list of explanations for applied modifiers
-    total_adjustment: int      # total adjustment from base
+
+    effective: int  # final effective D-SAL
+    base: int  # base value from policy
+    modifiers: list[str]  # list of explanations for applied modifiers
+    total_adjustment: int  # total adjustment from base
 
     def explain(self) -> str:
         lines = [
@@ -127,10 +128,7 @@ class DSALCalculator:
             adjustment += 1
             modifiers.append("+1 (evidence=empty: no evidence)")
         else:
-            confidences = [
-                e.confidence for e in proposal.evidence
-                if e.confidence is not None
-            ]
+            confidences = [e.confidence for e in proposal.evidence if e.confidence is not None]
             if confidences:
                 avg_confidence = sum(confidences) / len(confidences)
                 if avg_confidence < 0.6:

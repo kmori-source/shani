@@ -19,8 +19,9 @@ from pydantic import BaseModel, Field
 
 class PostureOutcome(str, Enum):
     """Result of PostureEngine evaluation."""
-    PASS      = "PASS"
-    REJECT    = "REJECT"
+
+    PASS = "PASS"
+    REJECT = "REJECT"
     AMBIGUOUS = "AMBIGUOUS"
 
 
@@ -31,16 +32,17 @@ class PostureConstraints(BaseModel):
     These define the boundary of actions the principal accepts responsibility for.
     Must remain within OrgPolicy.absolute_constraints.
     """
-    target_scope:           str  = Field(
+
+    target_scope: str = Field(
         ..., description="Regex or glob pattern for allowed targets, e.g. 'host:dev-*'"
     )
-    max_blast_radius:       str  = Field(
+    max_blast_radius: str = Field(
         ..., description="Maximum blast radius: isolated | limited | significant | critical"
     )
     reversibility_required: bool = Field(
         ..., description="If true, irreversible proposals are REJECTED"
     )
-    minimum_evidence:       int  = Field(
+    minimum_evidence: int = Field(
         ..., ge=0, description="Minimum number of evidence items required"
     )
 
@@ -49,9 +51,10 @@ class PostureConstraints(BaseModel):
 
 class PostureHistoryEntry(BaseModel):
     """Immutable record of a previous posture version. Must not be deleted."""
-    version:   str
+
+    version: str
     signed_at: datetime
-    note:      str = ""
+    note: str = ""
 
     model_config = {"frozen": True}
 
@@ -70,30 +73,31 @@ class UserPosture(BaseModel):
     - history entries are immutable after creation
     - posture_signature: Ed25519/HMAC signature over canonical_content() (SPEC §8.2, §8.7)
     """
-    version:           str
-    principal_id:      str
-    signed_at:         datetime
-    intent_statement:  str
-    simulation_ref:    str                       # must reference PostureSimulationResult
-    constraints:       PostureConstraints
-    history:           tuple[PostureHistoryEntry, ...] = Field(default_factory=tuple)
-    posture_signature: str | None = None         # base64 Ed25519/HMAC-SHA256 signature
+
+    version: str
+    principal_id: str
+    signed_at: datetime
+    intent_statement: str
+    simulation_ref: str  # must reference PostureSimulationResult
+    constraints: PostureConstraints
+    history: tuple[PostureHistoryEntry, ...] = Field(default_factory=tuple)
+    posture_signature: str | None = None  # base64 Ed25519/HMAC-SHA256 signature
 
     model_config = {"frozen": True}
 
     def canonical_content(self) -> dict:
         """Return the canonical dict payload that is signed (excludes posture_signature)."""
         return {
-            "version":          self.version,
-            "principal_id":     self.principal_id,
-            "signed_at":        self.signed_at.isoformat(),
+            "version": self.version,
+            "principal_id": self.principal_id,
+            "signed_at": self.signed_at.isoformat(),
             "intent_statement": self.intent_statement,
-            "simulation_ref":   self.simulation_ref,
+            "simulation_ref": self.simulation_ref,
             "constraints": {
-                "target_scope":           self.constraints.target_scope,
-                "max_blast_radius":       self.constraints.max_blast_radius,
+                "target_scope": self.constraints.target_scope,
+                "max_blast_radius": self.constraints.max_blast_radius,
                 "reversibility_required": self.constraints.reversibility_required,
-                "minimum_evidence":       self.constraints.minimum_evidence,
+                "minimum_evidence": self.constraints.minimum_evidence,
             },
         }
 
@@ -114,8 +118,11 @@ class UserPosture(BaseModel):
         import json as _json
         import base64 as _b64
         from ..crypto.signing import ADOSigner
+
         signer = ADOSigner(keypair)
-        canonical = _json.dumps(self.canonical_content(), sort_keys=True, separators=(',', ':')).encode()
+        canonical = _json.dumps(
+            self.canonical_content(), sort_keys=True, separators=(",", ":")
+        ).encode()
         sig_bytes = signer._sign_raw(canonical)
         return self.model_copy(update={"posture_signature": _b64.b64encode(sig_bytes).decode()})
 
@@ -126,7 +133,10 @@ class UserPosture(BaseModel):
         import json as _json
         import base64 as _b64
         from ..crypto.signing import ADOChainVerifier
-        canonical = _json.dumps(self.canonical_content(), sort_keys=True, separators=(',', ':')).encode()
+
+        canonical = _json.dumps(
+            self.canonical_content(), sort_keys=True, separators=(",", ":")
+        ).encode()
         try:
             sig_bytes = _b64.b64decode(self.posture_signature)
             ADOChainVerifier._verify_raw(public_key_bytes, canonical, sig_bytes)
@@ -188,15 +198,14 @@ class PostureRefinementRequest:
     3. Do NOT retry until principal updates and re-signs their Posture
     4. Log with full context for audit
     """
-    proposal_id:         str
-    principal_id:        str
-    ambiguity:           str
+
+    proposal_id: str
+    principal_id: str
+    ambiguity: str
     matched_constraints: list[str]
-    unresolved:          list[str]
-    suggested_update:    str | None = None
-    issued_at:           datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    unresolved: list[str]
+    suggested_update: str | None = None
+    issued_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
 
 # ---------------------------------------------------------------------------
@@ -217,16 +226,15 @@ class PostureSimulationResult:
     - Include at least 3 reject_examples if any rejections exist
     - Include a delta_vs_current comparison if current posture exists
     """
-    simulation_id:      str
-    posture_version:    str
-    principal_id:       str
-    pass_count:         int
-    reject_count:       int
-    ambiguous_count:    int
-    reject_examples:    list[dict[str, Any]]
-    pass_examples:      list[dict[str, Any]]
+
+    simulation_id: str
+    posture_version: str
+    principal_id: str
+    pass_count: int
+    reject_count: int
+    ambiguous_count: int
+    reject_examples: list[dict[str, Any]]
+    pass_examples: list[dict[str, Any]]
     ambiguous_examples: list[dict[str, Any]]
-    delta_vs_current:   dict[str, Any] | None = None
-    created_at:         datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    delta_vs_current: dict[str, Any] | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))

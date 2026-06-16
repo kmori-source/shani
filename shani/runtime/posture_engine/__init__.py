@@ -6,6 +6,7 @@ Re-exports from shani.posture (Phase 3 logical split).
 Usage:
     from shani.runtime.posture_engine import PostureEngine, PostureSimulation
 """
+
 from shani.posture.engine import PostureEngine
 from shani.posture.simulation import PostureSimulation
 from shani.schemas.posture import (

@@ -8,50 +8,87 @@ Tests for the 4-component risk evaluation pipeline.
 ③ Verify that evidence epistemic quality is correctly evaluated
 ④ Verify that framing attacks are detected via decision_space
 """
+
 from __future__ import annotations
 
 import os, sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 try:
     import pydantic
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
-    for _k in ("BaseModel","Field","field_validator","model_validator"):
+    for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 
 from datetime import datetime, timedelta, timezone
 from shani.schemas.decision import (
-    DecisionProposal, DecisionType, BlastRadius, DecisionScope, EvidenceItem
+    DecisionProposal,
+    DecisionType,
+    BlastRadius,
+    DecisionScope,
+    EvidenceItem,
 )
 from shani.risk import (
-    RiskAssessor, DSALMapper, RuleEngine, EvidenceEvaluator,
-    DecisionSpaceAnalyzer, RiskPipeline, Alternative, SourceTrust, classify_source
+    RiskAssessor,
+    DSALMapper,
+    RuleEngine,
+    EvidenceEvaluator,
+    DecisionSpaceAnalyzer,
+    RiskPipeline,
+    Alternative,
+    SourceTrust,
+    classify_source,
 )
 
 PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
 _failures = []
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
 
-def future(): return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
+
+
+def future():
+    return datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
 
 def prop(**kw) -> DecisionProposal:
     defaults = dict(
-        decision_type=DecisionType.REMEDIATION, proposed_by="a/v1",
-        description="restart service on dev server", target="host:dev-01",
-        scope=DecisionScope(), evidence=[EvidenceItem(source="monitor", content="ok", confidence=0.9)],
-        confidence=0.9, reversibility=True, blast_radius=BlastRadius.LIMITED,
-        delegation=False, expires_at=future(),
+        decision_type=DecisionType.REMEDIATION,
+        proposed_by="a/v1",
+        description="restart service on dev server",
+        target="host:dev-01",
+        scope=DecisionScope(),
+        evidence=[EvidenceItem(source="monitor", content="ok", confidence=0.9)],
+        confidence=0.9,
+        reversibility=True,
+        blast_radius=BlastRadius.LIMITED,
+        delegation=False,
+        expires_at=future(),
     )
     defaults.update(kw)
     return DecisionProposal(**defaults)
@@ -60,6 +97,7 @@ def prop(**kw) -> DecisionProposal:
 # ─────────────────────────────────────────────────────────────────────────────
 # ① risk_score and D-SAL separation
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_risk_dsal_separation():
     section("① risk_score and D-SAL separation")
@@ -80,8 +118,8 @@ def test_risk_dsal_separation():
     assert mapping2.effective_dsal >= mapping1.effective_dsal
 
     # risk_score itself does not contain D-SAL
-    assert not hasattr(risk, 'dsal'), "RiskScore should not contain dsal"
-    assert not hasattr(risk, 'effective_dsal'), "RiskScore should not contain effective_dsal"
+    assert not hasattr(risk, "dsal"), "RiskScore should not contain dsal"
+    assert not hasattr(risk, "effective_dsal"), "RiskScore should not contain effective_dsal"
     ok("RiskScore has no dsal field (separation confirmed)")
 
     # risk_score breakdown has independent dimensions
@@ -91,12 +129,8 @@ def test_risk_dsal_separation():
     ok(f"independent dimensions: {sorted(dim_names)}")
 
     # changing threshold table changes D-SAL mapping (institutionalized)
-    strict_mapper = DSALMapper(thresholds=[
-        (0.2, 1), (0.4, 2), (0.6, 3), (1.01, 4)
-    ])
-    permissive_mapper = DSALMapper(thresholds=[
-        (0.5, 1), (0.7, 2), (0.9, 3), (1.01, 4)
-    ])
+    strict_mapper = DSALMapper(thresholds=[(0.2, 1), (0.4, 2), (0.6, 3), (1.01, 4)])
+    permissive_mapper = DSALMapper(thresholds=[(0.5, 1), (0.7, 2), (0.9, 3), (1.01, 4)])
 
     strict_result = strict_mapper.map(risk, base_dsal=1)
     permissive_result = permissive_mapper.map(risk, base_dsal=1)
@@ -110,6 +144,7 @@ def test_risk_dsal_separation():
 # ② rule engine
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_rule_engine():
     section("② RuleEngine — immediate denial of critical cases")
 
@@ -117,18 +152,21 @@ def test_rule_engine():
     assessor = RiskAssessor()
 
     # policy_update always requires D-SAL 4 (OVERRIDE)
-    p1 = prop(decision_type=DecisionType.POLICY_UPDATE, evidence=[
-        EvidenceItem(source="audit", content="change required", confidence=0.9)
-    ])
+    p1 = prop(
+        decision_type=DecisionType.POLICY_UPDATE,
+        evidence=[EvidenceItem(source="audit", content="change required", confidence=0.9)],
+    )
     risk1 = assessor.assess(p1)
     result1 = engine.evaluate(p1, risk1)
     assert result1.override_dsal == 4
     ok("POLICY_UPDATE → RuleEngine OVERRIDEs to D-SAL 4")
 
     # CRITICAL + irreversible → D-SAL 4 OVERRIDE
-    p2 = prop(blast_radius=BlastRadius.CRITICAL, reversibility=False, evidence=[
-        EvidenceItem(source="edr", content="critical", confidence=0.9)
-    ])
+    p2 = prop(
+        blast_radius=BlastRadius.CRITICAL,
+        reversibility=False,
+        evidence=[EvidenceItem(source="edr", content="critical", confidence=0.9)],
+    )
     risk2 = assessor.assess(p2)
     result2 = engine.evaluate(p2, risk2)
     assert result2.override_dsal == 4
@@ -151,7 +189,7 @@ def test_rule_engine():
         target="host:prod-firewall-01",
         evidence=[
             EvidenceItem(source="siem", content="anomaly", confidence=0.9),
-            EvidenceItem(source="edr",  content="lateral", confidence=0.85),
+            EvidenceItem(source="edr", content="lateral", confidence=0.85),
             EvidenceItem(source="audit", content="confirmed", confidence=0.9),
         ],
     )
@@ -177,6 +215,7 @@ def test_rule_engine():
 # ③ Evidence epistemic security
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_evidence_epistemic():
     section("③ Evidence — epistemic security")
 
@@ -185,7 +224,9 @@ def test_evidence_epistemic():
     # source trust classification
     assert classify_source("edr-22314") == SourceTrust.SYSTEM_SENSOR
     assert classify_source("openclaw-brain") == SourceTrust.AGENT_DERIVED
-    assert classify_source("agent-observation") == SourceTrust.AGENT_DERIVED  # "agent" prefix matches first
+    assert (
+        classify_source("agent-observation") == SourceTrust.AGENT_DERIVED
+    )  # "agent" prefix matches first
     ok("source trust classification: SYSTEM_SENSOR / AGENT_DERIVED / SELF_REPORTED")
 
     # self-reported only → low quality
@@ -229,6 +270,7 @@ def test_evidence_epistemic():
 # ④ Decision space — framing attacks
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_decision_space():
     section("④ DecisionSpace — framing attack detection")
 
@@ -252,7 +294,9 @@ def test_decision_space():
         )
     ]
     result_suspicious = analyzer.analyze(p_suspicious, alternatives=alts_no_reason)
-    ok(f"lower-risk alternative rejected without reason: framing_risk={result_suspicious.framing_risk_score:.2f}")
+    ok(
+        f"lower-risk alternative rejected without reason: framing_risk={result_suspicious.framing_risk_score:.2f}"
+    )
     assert result_suspicious.framing_risk_score > 0.3
     assert result_suspicious.flags.get("unexplained_risk_escalation")
 
@@ -288,6 +332,7 @@ def test_decision_space():
 # Integration: PipelineResult
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_pipeline_integration():
     section("Integration: RiskPipeline end-to-end")
 
@@ -302,7 +347,9 @@ def test_pipeline_integration():
     )
     result = pipeline.evaluate(p_normal, base_dsal=1)
     assert not result.is_hard_denied
-    ok(f"normal case: effective_dsal={result.effective_dsal}, risk={result.risk_score.aggregate:.3f}")
+    ok(
+        f"normal case: effective_dsal={result.effective_dsal}, risk={result.risk_score.aggregate:.3f}"
+    )
 
     # Hard DENY: policy_update + no evidence
     p_deny = prop(
@@ -322,10 +369,12 @@ def test_pipeline_integration():
     ok("explain() contains results from all components")
 
     # verify independence of risk_score and D-SAL
-    assert hasattr(result, 'risk_score')
-    assert hasattr(result, 'dsal_mapping')
+    assert hasattr(result, "risk_score")
+    assert hasattr(result, "dsal_mapping")
     assert result.risk_score.aggregate != result.effective_dsal  # different units
-    ok(f"risk_score={result.risk_score.aggregate:.3f} and effective_dsal={result.effective_dsal} are independent")
+    ok(
+        f"risk_score={result.risk_score.aggregate:.3f} and effective_dsal={result.effective_dsal} are independent"
+    )
 
 
 if __name__ == "__main__":
@@ -342,8 +391,11 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     if _failures:
         print(f"  FAILED: {len(_failures)}")
-        for f in _failures: print(f"    • {f}")
-        import sys; sys.exit(1)
+        for f in _failures:
+            print(f"    • {f}")
+        import sys
+
+        sys.exit(1)
     else:
         print("  All tests passed\n")
         print("  Design verification:")

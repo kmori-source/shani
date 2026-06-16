@@ -12,6 +12,7 @@ Property being tested:
     - register_validator() adds validators after construction
     - explain() includes cross-validation results
 """
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani.schemas.decision import EvidenceItem
@@ -47,6 +49,7 @@ def fail(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Mock CrossValidators
 # ---------------------------------------------------------------------------
+
 
 class _AlwaysAgreeValidator:
     """Agrees with every EvidenceItem (agreement=+1.0)."""
@@ -156,7 +159,9 @@ def test_agreement_boosts_quality():
     if agree_score >= base_score:
         ok(f"agreement boosts quality_score: {base_score:.4f} → {agree_score:.4f}")
     else:
-        fail(f"agreement should raise quality_score: base={base_score:.4f}, agree={agree_score:.4f}")
+        fail(
+            f"agreement should raise quality_score: base={base_score:.4f}, agree={agree_score:.4f}"
+        )
 
     if agree_result.flags.get("cross_validated"):
         ok("cross_validated flag set")
@@ -194,7 +199,9 @@ def test_conflict_penalises_quality():
     if conflict_score < base_score:
         ok(f"conflict lowers quality_score: {base_score:.4f} → {conflict_score:.4f}")
     else:
-        fail(f"conflict should lower quality_score: base={base_score:.4f}, conflict={conflict_score:.4f}")
+        fail(
+            f"conflict should lower quality_score: base={base_score:.4f}, conflict={conflict_score:.4f}"
+        )
 
     if conflict_result.flags.get("cross_validation_conflict"):
         ok("cross_validation_conflict flag set")
@@ -295,17 +302,21 @@ def test_multiple_validators_combined():
     base_score = ev_base.evaluate(items).quality_score
 
     # one agree + one conflict → net penalty (_AGREEMENT_BONUS < _CONFLICT_PENALTY)
-    ev_mixed = EvidenceEvaluator(cross_validators=[
-        _AlwaysAgreeValidator(),
-        _AlwaysConflictValidator(),
-    ])
+    ev_mixed = EvidenceEvaluator(
+        cross_validators=[
+            _AlwaysAgreeValidator(),
+            _AlwaysConflictValidator(),
+        ]
+    )
     mixed_result = ev_mixed.evaluate(items)
     mixed_score = mixed_result.quality_score
 
     expected_delta = _CROSS_VALIDATION_AGREEMENT_BONUS - _CROSS_VALIDATION_CONFLICT_PENALTY
     expected_score = max(0.0, min(1.0, base_score + expected_delta))
     if abs(mixed_score - expected_score) < 1e-4:
-        ok(f"combined score correct: {base_score:.4f} + ({expected_delta:+.2f}) = {mixed_score:.4f}")
+        ok(
+            f"combined score correct: {base_score:.4f} + ({expected_delta:+.2f}) = {mixed_score:.4f}"
+        )
     else:
         fail(f"Expected combined score ≈{expected_score:.4f}, got {mixed_score:.4f}")
 

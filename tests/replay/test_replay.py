@@ -16,6 +16,7 @@ Test cases:
 Internal functions are prefixed with `_test_` and take a `ConformanceSuite` argument.
 Pytest-compatible wrappers (no arguments) call these and assert no failures.
 """
+
 from __future__ import annotations
 
 import os
@@ -32,6 +33,7 @@ try:
     import pydantic  # noqa: F401
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -44,6 +46,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani.security.replay_store import (
@@ -54,9 +57,11 @@ from shani.security.replay_store import (
 
 # Fix: explicitly load from tests/conformance/
 import sys, os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../conformance"))
 
 import importlib.util, pathlib
+
 
 def _load(name, rel):
     p = pathlib.Path(__file__).parent / rel
@@ -66,15 +71,16 @@ def _load(name, rel):
     spec.loader.exec_module(mod)
     return mod
 
+
 _fixtures = _load("_conformance_fixtures", "../conformance/fixtures.py")
 _framework = _load("_conformance_framework", "../conformance/framework.py")
 
-make_evaluator   = _fixtures.make_evaluator
-make_proposal    = _fixtures.make_proposal
-make_valid_ado   = _fixtures.make_valid_ado
+make_evaluator = _fixtures.make_evaluator
+make_proposal = _fixtures.make_proposal
+make_valid_ado = _fixtures.make_valid_ado
 make_expired_ado = _fixtures.make_expired_ado
-past             = _fixtures.past
-future           = _fixtures.future
+past = _fixtures.past
+future = _fixtures.future
 
 ConformanceSuite = _framework.ConformanceSuite
 
@@ -245,10 +251,12 @@ def _test_time_window_replay(suite: ConformanceSuite) -> None:
     )
 
     # ADO captured and replayed 1 hour later (expires_at in the past)
-    old_ado = valid_ado.model_copy(update={
-        "issued_at":  past(seconds=3600),   # issued 1 hour ago
-        "expires_at": past(seconds=3000),   # expired 50 minutes ago
-    })
+    old_ado = valid_ado.model_copy(
+        update={
+            "issued_at": past(seconds=3600),  # issued 1 hour ago
+            "expires_at": past(seconds=3000),  # expired 50 minutes ago
+        }
+    )
 
     suite.must_fail(
         "time_window:very_old_expired",
@@ -264,10 +272,12 @@ def _test_time_window_replay(suite: ConformanceSuite) -> None:
     )
 
     # ADO that expired just 1 second ago
-    just_expired = valid_ado.model_copy(update={
-        "issued_at":  past(seconds=65),
-        "expires_at": past(seconds=1),
-    })
+    just_expired = valid_ado.model_copy(
+        update={
+            "issued_at": past(seconds=65),
+            "expires_at": past(seconds=1),
+        }
+    )
 
     suite.must_fail(
         "time_window:just_expired",
@@ -336,11 +346,7 @@ def _test_valid_sig_consumed_nonce(suite: ConformanceSuite) -> None:
 
     # Audit trail must be retrievable for incident response
     record = ev._nonce_store.get_record(ado.nonce)
-    has_audit_trail = (
-        record is not None
-        and "decision_id" in record
-        and "consumed_at" in record
-    )
+    has_audit_trail = record is not None and "decision_id" in record and "consumed_at" in record
     suite.must_fail(
         "valid_sig_consumed:audit_trail_exists",
         condition=has_audit_trail,

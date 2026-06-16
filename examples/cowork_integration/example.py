@@ -1,17 +1,17 @@
 """
 examples/cowork_integration/example.py
 
-Claude API (Anthropic) の tool_use に Shani ガバナンスを追加するサンプル。
+Sample showing how to add Shani governance to Claude API (Anthropic) tool_use.
 
-cowork は Claude API の tool_use 機能を用いたマルチエージェント協調フレームワーク。
-本例では ShaniCoworkAdapter を使用して、Claude が返す tool_use ブロックを
-実行前に Shani ガバナンスで検証する。
+cowork is a multi-agent collaboration framework using Claude API's tool_use feature.
+This example uses ShaniCoworkAdapter to verify tool_use blocks returned by Claude
+through Shani governance before execution.
 
 Usage:
     pip install shani anthropic
     ANTHROPIC_API_KEY=your_key python example.py
 
-注: ANTHROPIC_API_KEY 未設定の場合は dry-run モードで実行（Claude API 未呼び出し）。
+Note: If ANTHROPIC_API_KEY is not set, runs in dry-run mode (Claude API not called).
 """
 
 from __future__ import annotations
@@ -25,15 +25,19 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider
@@ -44,7 +48,7 @@ from shani.hitl.channel.channels import CLIApprovalChannel
 from shani.adapters.cowork import ShaniCoworkAdapter, CoworkToolPolicy
 
 
-# ─── 1. ガバナンスゲートを構築 ────────────────────────────────────────────────
+# ─── 1. Build governance gate ─────────────────────────────────────────────────
 
 channel = CLIApprovalChannel()
 
@@ -55,10 +59,15 @@ evaluator = ShaniEvaluator(
             "cowork-agent/v1": AgentIdentity(
                 agent_id="cowork-agent/v1",
                 granted_dsal=2,
-                allowed_decision_types=frozenset([
-                    "tool_call", "data_access", "remediation",
-                    "configuration_change", "agent_task",
-                ]),
+                allowed_decision_types=frozenset(
+                    [
+                        "tool_call",
+                        "data_access",
+                        "remediation",
+                        "configuration_change",
+                        "agent_task",
+                    ]
+                ),
             )
         }
     ),
@@ -67,12 +76,12 @@ evaluator = ShaniEvaluator(
 gate = HITLGate(
     evaluator=evaluator,
     channel=channel,
-    approval_required_at_dsal=2,  # D-SAL 2+ でオペレーター承認が必要
+    approval_required_at_dsal=2,  # D-SAL 2+ requires operator approval
     timeout_minutes=5,
 )
 
 
-# ─── 2. Shani cowork アダプターを初期化 ───────────────────────────────────────
+# ─── 2. Initialize Shani cowork adapter ───────────────────────────────────────
 
 adapter = ShaniCoworkAdapter(
     gate=gate,
@@ -95,26 +104,27 @@ adapter = ShaniCoworkAdapter(
 )
 
 
-# ─── 3. ツールレジストリを定義 ────────────────────────────────────────────────
+# ─── 3. Define tool registry ──────────────────────────────────────────────────
 
 import subprocess
 
+
 def bash_tool(inp: dict) -> str:
-    """シェルコマンドを実行する（高リスク）。"""
+    """Execute a shell command (high risk)."""
     cmd = inp.get("command", "")
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
     return result.stdout or result.stderr
 
 
 def read_file_tool(inp: dict) -> str:
-    """ファイルを読み取る（低リスク）。"""
+    """Read a file (low risk)."""
     path = inp.get("path", "")
     with open(path) as f:
         return f.read()
 
 
 def write_file_tool(inp: dict) -> str:
-    """ファイルに書き込む（中リスク）。"""
+    """Write to a file (medium risk)."""
     path = inp.get("path", "")
     content = inp.get("content", "")
     with open(path, "w") as f:
@@ -123,16 +133,16 @@ def write_file_tool(inp: dict) -> str:
 
 
 tool_registry = {
-    "bash":       bash_tool,
-    "read_file":  read_file_tool,
+    "bash": bash_tool,
+    "read_file": read_file_tool,
     "write_file": write_file_tool,
 }
 
-# Shani ガバナンス版ツールレジストリに変換（オプション：governed_registry を使う方法）
+# Convert to Shani governance tool registry (optional: using governed_registry approach)
 # governed_registry = adapter.wrap_tool_registry(tool_registry)
 
 
-# ─── 4. Claude API ループ（ANTHROPIC_API_KEY があれば実際に呼ぶ）───────────────
+# ─── 4. Claude API loop (calls API if ANTHROPIC_API_KEY is set) ───────────────
 
 ANTHROPIC_TOOLS = [
     {
@@ -163,7 +173,7 @@ ANTHROPIC_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path":    {"type": "string"},
+                "path": {"type": "string"},
                 "content": {"type": "string"},
             },
             "required": ["path", "content"],
@@ -173,13 +183,18 @@ ANTHROPIC_TOOLS = [
 
 
 def run_cowork_loop(task: str):
-    """Shani ガバナンス付き Claude API エージェントループ。"""
+    """Claude API agent loop with Shani governance."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print("[dry-run] ANTHROPIC_API_KEY not set. Simulating tool_use response.")
-        # ドライランシミュレーション
+        # Dry-run simulation
         fake_tool_use = [
-            {"type": "tool_use", "id": "tu_1", "name": "read_file", "input": {"path": "/etc/hostname"}},
+            {
+                "type": "tool_use",
+                "id": "tu_1",
+                "name": "read_file",
+                "input": {"path": "/etc/hostname"},
+            },
         ]
         results = adapter.process_response(fake_tool_use, tool_registry)
         print(f"[dry-run] Tool results: {results}")
@@ -188,7 +203,7 @@ def run_cowork_loop(task: str):
     try:
         import anthropic
     except ImportError:
-        print("anthropic パッケージが未インストールです。pip install anthropic")
+        print("anthropic package is not installed. pip install anthropic")
         return
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -202,18 +217,23 @@ def run_cowork_loop(task: str):
             messages=messages,
         )
 
-        # tool_use がなければ終了
-        tool_use_blocks = [b for b in response.content
-                           if (b.get("type") if isinstance(b, dict) else getattr(b, "type", None)) == "tool_use"]
+        # Exit if no tool_use
+        tool_use_blocks = [
+            b
+            for b in response.content
+            if (b.get("type") if isinstance(b, dict) else getattr(b, "type", None)) == "tool_use"
+        ]
         if not tool_use_blocks:
-            # 最終テキスト応答
+            # Final text response
             for block in response.content:
-                text = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+                text = (
+                    block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+                )
                 if text:
                     print(f"\nClaude: {text}")
             break
 
-        # Shani ガバナンス経由でツールを実行
+        # Execute tools via Shani governance
         messages.append({"role": "assistant", "content": response.content})
         tool_results = adapter.process_response(response, tool_registry)
         messages.append({"role": "user", "content": tool_results})

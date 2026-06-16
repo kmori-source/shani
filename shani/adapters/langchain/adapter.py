@@ -108,11 +108,11 @@ class ShaniLangChainTool:
         result = self._gate.evaluate(proposal)
 
         if isinstance(result, DeniedDecision):
-            raise PermissionError(
-                f"Shani denied '{self._tool.name}': {result.reason}"
-            )
+            raise PermissionError(f"Shani denied '{self._tool.name}': {result.reason}")
 
-        logger.info("LangChain tool executing | tool=%s dsal=%s", self._tool.name, result.authorized_dsal)
+        logger.info(
+            "LangChain tool executing | tool=%s dsal=%s", self._tool.name, result.authorized_dsal
+        )
         output = self._tool.run(tool_input, **kwargs)
         self._gate.register_executed(result, agent_id=self._proposed_by)
         return output
@@ -172,13 +172,15 @@ def patch_langchain_tools(
 
     for tool in tools:
         tool_policy = policy.get(tool.name, policy.get(type(tool).__name__, {}))
-        governed.append(ShaniLangChainTool(
-            tool=tool,
-            gate=gate,
-            decision_type=tool_policy.get("decision_type", default_decision_type),
-            blast_radius=tool_policy.get("blast_radius", default_blast_radius),
-            proposed_by=proposed_by,
-        ))
+        governed.append(
+            ShaniLangChainTool(
+                tool=tool,
+                gate=gate,
+                decision_type=tool_policy.get("decision_type", default_decision_type),
+                blast_radius=tool_policy.get("blast_radius", default_blast_radius),
+                proposed_by=proposed_by,
+            )
+        )
         logger.info("Patched LangChain tool | name=%s (dsal=auto)", tool.name)
 
     return governed

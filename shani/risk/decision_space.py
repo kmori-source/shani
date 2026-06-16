@@ -49,26 +49,26 @@ class Alternative:
         2. allows Shani to verify the appropriateness of the choice
         3. creates an audit trail explaining why this option was chosen
     """
-    description:    str
-    decision_type:  str          # DecisionType value
-    blast_radius:   str          # BlastRadius value
-    reason_rejected: str         # reason for rejection
+
+    description: str
+    decision_type: str  # DecisionType value
+    blast_radius: str  # BlastRadius value
+    reason_rejected: str  # reason for rejection
 
     def risk_level(self) -> int:
         """relative risk level of this alternative (0=lowest, 3=highest)。"""
-        blast_map = {
-            "isolated": 0, "limited": 1, "significant": 2, "critical": 3
-        }
+        blast_map = {"isolated": 0, "limited": 1, "significant": 2, "critical": 3}
         return blast_map.get(self.blast_radius, 1)
 
 
 @dataclass(frozen=True)
 class DecisionSpaceAnalysis:
     """analysis result for the DecisionSpace。"""
-    alternatives_provided:  bool
-    framing_risk_score:     float       # 0.0〜1.0、higher value indicates stronger framing suspicion
-    flags:                  dict[str, bool]
-    insights:               list[str]   # analysis insights
+
+    alternatives_provided: bool
+    framing_risk_score: float  # 0.0〜1.0、higher value indicates stronger framing suspicion
+    flags: dict[str, bool]
+    insights: list[str]  # analysis insights
 
     def explain(self) -> str:
         lines = [
@@ -90,10 +90,10 @@ class DecisionSpaceAnalyzer:
 
     # blast_radius ordering
     _BLAST_ORDER = {
-        BlastRadius.ISOLATED:    0,
-        BlastRadius.LIMITED:     1,
+        BlastRadius.ISOLATED: 0,
+        BlastRadius.LIMITED: 1,
         BlastRadius.SIGNIFICANT: 2,
-        BlastRadius.CRITICAL:    3,
+        BlastRadius.CRITICAL: 3,
     }
 
     def analyze(
@@ -133,10 +133,7 @@ class DecisionSpaceAnalyzer:
         proposed_blast = self._BLAST_ORDER.get(proposal.blast_radius, 1)
 
         # check if lower-risk alternatives exist
-        lower_risk_alts = [
-            a for a in alternatives
-            if a.risk_level() < proposed_blast
-        ]
+        lower_risk_alts = [a for a in alternatives if a.risk_level() < proposed_blast]
 
         if lower_risk_alts:
             for alt in lower_risk_alts:
@@ -165,8 +162,7 @@ class DecisionSpaceAnalyzer:
 
         # comparison with alternatives of the same decision_type
         same_type_alts = [
-            a for a in alternatives
-            if a.decision_type == proposal.decision_type.value
+            a for a in alternatives if a.decision_type == proposal.decision_type.value
         ]
         if same_type_alts:
             insights.append(

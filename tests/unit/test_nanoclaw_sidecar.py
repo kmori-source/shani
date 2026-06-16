@@ -1,23 +1,24 @@
 """
 tests/unit/test_nanoclaw_sidecar.py
 
-ShaniSidecarServer / ShaniSidecarClient のユニットテスト。
+Unit tests for ShaniSidecarServer / ShaniSidecarClient.
 
-Pattern 1: Pod内サイドカー
-  - サーバーはデフォルト 0.0.0.0 にバインド
-  - クライアントは localhost で接続
+Pattern 1: In-pod sidecar
+  - Server binds to 0.0.0.0 by default
+  - Client connects via localhost
 
 Tests:
-  - サーバーが起動・停止できる
-  - /healthz が ok を返す
-  - evaluate: read ツール → 承認
-  - evaluate: 拒否 → DeniedDecision
-  - verify_binding: 正当な ADO → True
-  - register_executed: 正常に通知できる
-  - ShaniSidecarClient.evaluate + patch_nanoclaw_agent の統合
-  - SHANI_HOST / SHANI_PORT 環境変数が反映される
-  - サーバー停止後はクライアントが RuntimeError を送出する
+  - Server can start and stop
+  - /healthz returns ok
+  - evaluate: read tool → approved
+  - evaluate: deny → DeniedDecision
+  - verify_binding: valid ADO → True
+  - register_executed: notification succeeds
+  - ShaniSidecarClient.evaluate + patch_nanoclaw_agent integration
+  - SHANI_HOST / SHANI_PORT environment variables are reflected
+  - After server stops, client raises RuntimeError
 """
+
 from __future__ import annotations
 
 import os
@@ -32,6 +33,7 @@ except ImportError:
     import types as _t
     import importlib.util as _iu
     import pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -44,6 +46,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider, DeniedDecision
@@ -62,9 +65,17 @@ FAIL = "\033[91m✗\033[0m"
 _failures: list[str] = []
 
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,11 +98,13 @@ def make_gate(hitl_dsal: int = 3) -> HITLGate:
         "nanoclaw-agent/v1": AgentIdentity(
             agent_id="nanoclaw-agent/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                DecisionType.AGENT_TASK.value,
-                DecisionType.DATA_ACCESS.value,
-                DecisionType.CONFIGURATION_CHANGE.value,
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    DecisionType.AGENT_TASK.value,
+                    DecisionType.DATA_ACCESS.value,
+                    DecisionType.CONFIGURATION_CHANGE.value,
+                ]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -117,7 +130,7 @@ def start_server(gate: HITLGate, port: int) -> ShaniSidecarServer:
                 return server
         except Exception:
             continue
-    server.stop() # 起動失敗したら止める
+    server.stop()  # Stop if startup failed
     raise RuntimeError(f"Server failed to start on port {port}")
 
 
@@ -125,22 +138,23 @@ def start_server(gate: HITLGate, port: int) -> ShaniSidecarServer:
 # Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_server_start_stop():
-    section("サーバー起動・停止")
+    section("server start and stop")
     port = _next_port()
     gate = make_gate()
     server = start_server(gate, port)
     client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
     if client.healthz():
-        ok("サーバー起動確認: /healthz → ok")
+        ok("server startup confirmed: /healthz → ok")
     else:
-        fail("サーバー起動失敗")
+        fail("server startup failed")
     server.stop()
-    ok("サーバー停止完了")
+    ok("server stopped successfully")
 
 
 def test_healthz():
-    section("/healthz エンドポイント")
+    section("/healthz endpoint")
     port = _next_port()
     gate = make_gate()
     server = start_server(gate, port)
@@ -150,19 +164,20 @@ def test_healthz():
         if result:
             ok("/healthz → True")
         else:
-            fail("/healthz → False（サーバー未応答）")
+            fail("/healthz → False (server not responding)")
     finally:
         server.stop()
 
 
 def test_evaluate_approved():
-    section("evaluate: read ツール → 承認")
+    section("evaluate: read tool → approved")
     port = _next_port()
     gate = make_gate(hitl_dsal=3)
     server = start_server(gate, port)
     try:
         client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
         from shani.adapters.nanoclaw import ShaniNanoclawAdapter
+
         adapter = ShaniNanoclawAdapter(gate=client, proposed_by="nanoclaw-agent/v1")
         result = adapter.call_tool(
             tool_name="fetch_report",
@@ -170,23 +185,24 @@ def test_evaluate_approved():
             kwargs={"url": "https://api.example.com/report"},
         )
         if "report:" in str(result):
-            ok(f"evaluate 承認 + 実行完了: {result}")
+            ok(f"evaluate approved + execution complete: {result}")
         else:
-            fail("evaluate 承認後の結果が期待値と異なる", str(result))
+            fail("evaluate approved but result differs from expected", str(result))
     finally:
         server.stop()
 
 
 def test_evaluate_denied():
-    section("evaluate: 拒否 → DeniedDecision")
+    section("evaluate: deny → DeniedDecision")
     port = _next_port()
-    # HITL 閾値を D-SAL=1 にして全アクションを HITL にする
-    # CallbackChannel はデフォルトで timeout → 拒否
+    # Set HITL threshold to D-SAL=1 to make all actions go through HITL
+    # CallbackChannel defaults to timeout → deny
     gate = make_gate(hitl_dsal=1)
     server = start_server(gate, port)
     try:
         client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
         from shani.adapters.nanoclaw import ShaniNanoclawAdapter
+
         adapter = ShaniNanoclawAdapter(gate=client, proposed_by="nanoclaw-agent/v1")
         try:
             adapter.call_tool(
@@ -196,15 +212,15 @@ def test_evaluate_denied():
                 confidence=0.1,
             )
             # HITL timeout or approval depending on gate config
-            ok("evaluate: 承認（CallbackChannel auto-approve or timeout）")
+            ok("evaluate: approved (CallbackChannel auto-approve or timeout)")
         except (PermissionError, RuntimeError, TimeoutError) as e:
-            ok(f"evaluate: 拒否または例外 → {type(e).__name__}: {str(e)[:60]}")
+            ok(f"evaluate: denied or exception → {type(e).__name__}: {str(e)[:60]}")
     finally:
         server.stop()
 
 
 def test_verify_binding():
-    section("verify_binding: 正当な ADO → True")
+    section("verify_binding: valid ADO → True")
     port = _next_port()
     gate = make_gate(hitl_dsal=3)
     server = start_server(gate, port)
@@ -212,7 +228,11 @@ def test_verify_binding():
         client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
         from shani.adapters.nanoclaw import ShaniNanoclawAdapter
         from shani.schemas.decision import (
-            DecisionProposal, DecisionType, BlastRadius, DecisionScope, EvidenceItem
+            DecisionProposal,
+            DecisionType,
+            BlastRadius,
+            DecisionScope,
+            EvidenceItem,
         )
         from datetime import datetime, timedelta, timezone
 
@@ -230,27 +250,31 @@ def test_verify_binding():
         )
         result = client.evaluate(proposal)
         if isinstance(result, DeniedDecision):
-            ok(f"evaluate: 拒否（ポリシー依存）→ スキップ: {result.reason[:60]}")
+            ok(f"evaluate: denied (policy dependent) → skipped: {result.reason[:60]}")
             return
-        ok(f"ADO 取得: dsal={result.authorized_dsal}")
+        ok(f"ADO obtained: dsal={result.authorized_dsal}")
         ok_binding = client.verify_binding(result)
         if ok_binding:
             ok("verify_binding → True")
         else:
-            fail("verify_binding → False（期待: True）")
+            fail("verify_binding → False (expected: True)")
     finally:
         server.stop()
 
 
 def test_register_executed():
-    section("register_executed: 正常通知")
+    section("register_executed: notification succeeds")
     port = _next_port()
     gate = make_gate(hitl_dsal=3)
     server = start_server(gate, port)
     try:
         client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}")
         from shani.schemas.decision import (
-            DecisionProposal, DecisionType, BlastRadius, DecisionScope, EvidenceItem
+            DecisionProposal,
+            DecisionType,
+            BlastRadius,
+            DecisionScope,
+            EvidenceItem,
         )
         from datetime import datetime, timedelta, timezone
 
@@ -268,19 +292,19 @@ def test_register_executed():
         )
         ado = client.evaluate(proposal)
         if isinstance(ado, DeniedDecision):
-            ok(f"evaluate 拒否 → register_executed テストスキップ: {ado.reason[:60]}")
+            ok(f"evaluate denied → register_executed test skipped: {ado.reason[:60]}")
             return
         try:
             client.register_executed(ado, agent_id="nanoclaw-agent/v1")
-            ok("register_executed 完了（例外なし）")
+            ok("register_executed complete (no exception)")
         except Exception as e:
-            fail("register_executed で例外", str(e))
+            fail("exception in register_executed", str(e))
     finally:
         server.stop()
 
 
 def test_patch_nanoclaw_agent_sidecar():
-    section("patch_nanoclaw_agent(gate=client) の統合")
+    section("patch_nanoclaw_agent(gate=client) integration")
     port = _next_port()
     gate = make_gate(hitl_dsal=3)
     server = start_server(gate, port)
@@ -293,27 +317,27 @@ def test_patch_nanoclaw_agent_sidecar():
         agent = FakeAgent()
         agent.tools = {
             "fetch": lambda url: f"data:{url}",
-            "read":  lambda path: f"content:{path}",
+            "read": lambda path: f"content:{path}",
         }
 
         patch_nanoclaw_agent(agent=agent, gate=client, proposed_by="nanoclaw-agent/v1")
 
         if isinstance(agent.tools, dict) and len(agent.tools) == 2:
-            ok(f"tools パッチ完了: {sorted(agent.tools.keys())}")
+            ok(f"tools patch complete: {sorted(agent.tools.keys())}")
         else:
-            fail("tools パッチ失敗", str(agent.tools))
+            fail("tools patch failed", str(agent.tools))
 
         result = agent.tools["fetch"](url="https://api.example.com")
         if "data:" in str(result):
-            ok(f"パッチ済みツール実行OK: {result}")
+            ok(f"patched tool executed OK: {result}")
         else:
-            fail("パッチ済みツール実行失敗", str(result))
+            fail("patched tool execution failed", str(result))
     finally:
         server.stop()
 
 
 def test_env_var_host_port():
-    section("SHANI_HOST / SHANI_PORT 環境変数")
+    section("SHANI_HOST / SHANI_PORT environment variables")
     port = _next_port()
     os.environ["SHANI_HOST"] = "127.0.0.1"
     os.environ["SHANI_PORT"] = str(port)
@@ -321,26 +345,26 @@ def test_env_var_host_port():
         gate = make_gate()
         server = ShaniSidecarServer(gate=gate)
         if server.host == "127.0.0.1":
-            ok(f"SHANI_HOST 反映: host={server.host}")
+            ok(f"SHANI_HOST reflected: host={server.host}")
         else:
-            fail(f"SHANI_HOST 未反映: host={server.host}")
+            fail(f"SHANI_HOST not reflected: host={server.host}")
         if server.port == port:
-            ok(f"SHANI_PORT 反映: port={server.port}")
+            ok(f"SHANI_PORT reflected: port={server.port}")
         else:
-            fail(f"SHANI_PORT 未反映: port={server.port}")
+            fail(f"SHANI_PORT not reflected: port={server.port}")
 
         client = ShaniSidecarClient()
         if f"127.0.0.1:{port}" in client._base_url:
-            ok(f"クライアント base_url 反映: {client._base_url}")
+            ok(f"client base_url reflected: {client._base_url}")
         else:
-            fail(f"クライアント base_url 未反映: {client._base_url}")
+            fail(f"client base_url not reflected: {client._base_url}")
     finally:
         del os.environ["SHANI_HOST"]
         del os.environ["SHANI_PORT"]
 
 
 def test_server_stopped_raises():
-    section("停止済みサーバーへのリクエスト → RuntimeError")
+    section("request to stopped server → RuntimeError")
     port = _next_port()
     gate = make_gate()
     server = start_server(gate, port)
@@ -349,26 +373,27 @@ def test_server_stopped_raises():
     client = ShaniSidecarClient(base_url=f"http://127.0.0.1:{port}", timeout=1.0)
     try:
         client.healthz()
-        ok("healthz: サーバー停止後も到達（予期外だが許容）")
+        ok("healthz: still reachable after server stop (unexpected but acceptable)")
     except (RuntimeError, Exception):
-        ok("停止済みサーバー → 例外送出（期待通り）")
+        ok("stopped server → exception raised (as expected)")
 
 
 def test_server_default_host():
-    section("ShaniSidecarServer デフォルト host = 0.0.0.0")
+    section("ShaniSidecarServer default host = 0.0.0.0")
     gate = make_gate()
     server = ShaniSidecarServer(gate=gate)
     if server.host == "0.0.0.0":
-        ok(f"デフォルト host = 0.0.0.0（Pod内サイドカー用）")
+        ok(f"default host = 0.0.0.0 (for in-pod sidecar)")
     else:
-        fail(f"デフォルト host が 0.0.0.0 ではない: {server.host}")
+        fail(f"default host is not 0.0.0.0: {server.host}")
     if server.port == 8765:
-        ok(f"デフォルト port = 8765")
+        ok(f"default port = 8765")
     else:
-        fail(f"デフォルト port が 8765 ではない: {server.port}")
+        fail(f"default port is not 8765: {server.port}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     print("\ntest_nanoclaw_sidecar.py")

@@ -1,12 +1,12 @@
-# Pattern 1: Pod内サイドカー
+# Pattern 1: In-Pod Sidecar
 #
-# nanoclaw コンテナと shani-sidecar コンテナを同一 Pod に配置する。
-# 同一 Pod は network namespace を共有するため、localhost で通信できる。
+# Place the nanoclaw container and shani-sidecar container in the same Pod.
+# Containers in the same Pod share a network namespace, so they can communicate via localhost.
 #
-# スケールアウト: Deployment の replicas を増やすだけで
-#   nanoclaw + shani-sidecar のペアが複製される。
-# HITL state: in-memory（replicas=1 相当の独立インスタンス）。
-#   複数 Pod をまたいだ HITL 一元化が必要な場合は Pattern 2 を検討する。
+# Scale-out: Simply increase the Deployment replicas to replicate
+#   nanoclaw + shani-sidecar pairs.
+# HITL state: in-memory (independent instances equivalent to replicas=1).
+#   If centralized HITL across multiple Pods is needed, consider Pattern 2.
 #
 # Usage:
 #   kubectl apply -f k8s-pod-sidecar.yaml
@@ -29,12 +29,12 @@ spec:
     spec:
       containers:
 
-        # ── nanoclaw エージェントコンテナ ────────────────────────────────────
+        # ── nanoclaw agent container ──────────────────────────────────────────
         - name: nanoclaw-agent
           image: nanoclaw:latest
           imagePullPolicy: IfNotPresent
           env:
-            # localhost で shani-sidecar に接続
+            # Connect to shani-sidecar via localhost
             - name: SHANI_HOST
               value: "localhost"
             - name: SHANI_PORT
@@ -47,7 +47,7 @@ spec:
               cpu: "500m"
               memory: "512Mi"
 
-        # ── Shani サイドカーコンテナ ─────────────────────────────────────────
+        # ── Shani sidecar container ───────────────────────────────────────────
         - name: shani-sidecar
           image: shani:latest
           imagePullPolicy: IfNotPresent
@@ -55,15 +55,15 @@ spec:
             - containerPort: 8765
               name: http
           env:
-            # Pod内なので 0.0.0.0 でバインドする（nanoclaw は localhost で接続）
+            # Bind on 0.0.0.0 within the Pod (nanoclaw connects via localhost)
             - name: SHANI_HOST
               value: "0.0.0.0"
             - name: SHANI_PORT
               value: "8765"
-            # D-SAL 2 以上でオペレーター承認を要求する
+            # Require operator approval at D-SAL 2 or above
             - name: HITL_DSAL
               value: "2"
-            # 署名キー（本番環境では Secret 参照に変更する）
+            # Signing key (change to a Secret reference in production)
             # - name: SHANI_SHANI_BOUNDARY_KEY
             #   valueFrom:
             #     secretKeyRef:
@@ -90,8 +90,8 @@ spec:
               memory: "256Mi"
 
 ---
-# （オプション）nanoclaw エージェントの Service
-# 他のサービスからエージェントに到達する必要がある場合のみ作成する
+# (Optional) Service for the nanoclaw agent
+# Create only if other services need to reach the agent
 apiVersion: v1
 kind: Service
 metadata:

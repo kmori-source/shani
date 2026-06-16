@@ -59,19 +59,19 @@ from .assessor import RiskScore
 
 
 class RuleOutcomeType(str, Enum):
-    PASS      = "pass"
-    OVERRIDE  = "override"
-    DENY      = "deny"
-    REQUIRE   = "require"
+    PASS = "pass"
+    OVERRIDE = "override"
+    DENY = "deny"
+    REQUIRE = "require"
 
 
 @dataclass(frozen=True)
 class RuleOutcome:
-    outcome:    RuleOutcomeType
-    rule_name:  str
-    reason:     str
-    dsal:       int | None = None        # used when outcome is OVERRIDE
-    requirement: str | None = None      # used when outcome is REQUIRE
+    outcome: RuleOutcomeType
+    rule_name: str
+    reason: str
+    dsal: int | None = None  # used when outcome is OVERRIDE
+    requirement: str | None = None  # used when outcome is REQUIRE
 
     @property
     def is_deny(self) -> bool:
@@ -89,10 +89,11 @@ class RuleOutcome:
 @dataclass(frozen=True)
 class RuleResult:
     """Evaluation result from the RuleEngine."""
-    outcomes:       list[RuleOutcome]
-    final_deny:     RuleOutcome | None       # first DENY if any
-    final_override: RuleOutcome | None       # highest D-SAL from OVERRIDE rules
-    applied_rules:  list[str]
+
+    outcomes: list[RuleOutcome]
+    final_deny: RuleOutcome | None  # first DENY if any
+    final_override: RuleOutcome | None  # highest D-SAL from OVERRIDE rules
+    applied_rules: list[str]
 
     @property
     def is_denied(self) -> bool:
@@ -115,8 +116,10 @@ class RuleResult:
 # Built-in rules (always active)
 # ---------------------------------------------------------------------------
 
+
 class Rule:
     """Base class for rules."""
+
     name: str = "unnamed"
 
     def evaluate(
@@ -130,6 +133,7 @@ class Rule:
 
 class PolicyUpdateFloorRule(Rule):
     """policy_update always requires D-SAL 4. Immutable."""
+
     name = "policy_update_hardcoded_floor"
 
     def evaluate(self, proposal, risk_score):
@@ -138,7 +142,6 @@ class PolicyUpdateFloorRule(Rule):
                 outcome=RuleOutcomeType.OVERRIDE,
                 rule_name=self.name,
                 reason="policy_update always requires D-SAL 4 (governance itself requires maximum approval).",
-
                 dsal=4,
             )
         return None
@@ -146,11 +149,11 @@ class PolicyUpdateFloorRule(Rule):
 
 class CriticalIrreversibleRule(Rule):
     """CRITICAL blast_radius + irreversible operation always requires D-SAL 4."""
+
     name = "critical_irreversible_floor"
 
     def evaluate(self, proposal, risk_score):
-        if (proposal.blast_radius == BlastRadius.CRITICAL
-                and not proposal.reversibility):
+        if proposal.blast_radius == BlastRadius.CRITICAL and not proposal.reversibility:
             return RuleOutcome(
                 outcome=RuleOutcomeType.OVERRIDE,
                 rule_name=self.name,
@@ -162,6 +165,7 @@ class CriticalIrreversibleRule(Rule):
 
 class ProdNetworkNoEvidenceRule(Rule):
     """DENY if production network operation has fewer than 2 evidence items."""
+
     name = "prod_network_insufficient_evidence"
 
     def evaluate(self, proposal, risk_score):
@@ -185,11 +189,11 @@ class ProdNetworkNoEvidenceRule(Rule):
 
 class NoEvidenceCriticalDenyRule(Rule):
     """DENY if blast_radius is CRITICAL and evidence is empty."""
+
     name = "no_evidence_critical_deny"
 
     def evaluate(self, proposal, risk_score):
-        if (not proposal.evidence
-                and proposal.blast_radius == BlastRadius.CRITICAL):
+        if not proposal.evidence and proposal.blast_radius == BlastRadius.CRITICAL:
             return RuleOutcome(
                 outcome=RuleOutcomeType.DENY,
                 rule_name=self.name,
@@ -200,6 +204,7 @@ class NoEvidenceCriticalDenyRule(Rule):
 
 class LowConfidenceHighRiskRule(Rule):
     """DENY if risk_score is high and agent confidence is low."""
+
     name = "low_confidence_high_risk"
 
     def evaluate(self, proposal, risk_score):
@@ -262,10 +267,7 @@ class RuleEngine:
 
         # use the highest D-SAL among OVERRIDE outcomes
         overrides = [o for o in outcomes if o.is_override and o.dsal is not None]
-        final_override = (
-            max(overrides, key=lambda o: o.dsal)
-            if overrides else None
-        )
+        final_override = max(overrides, key=lambda o: o.dsal) if overrides else None
 
         return RuleResult(
             outcomes=outcomes,

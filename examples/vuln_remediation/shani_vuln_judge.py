@@ -39,6 +39,7 @@ try:
     import yaml  # noqa: F401
 except ImportError:
     import subprocess as _sp
+
     _sp.check_call([sys.executable, "-m", "pip", "install", "--quiet", "pyyaml"])
 
 # pydantic shim — mirrors pattern from scenario.py
@@ -68,7 +69,7 @@ from shani.hitl.approval.gate import HITLGate
 from shani.hitl.channel.channels import CallbackApprovalChannel, CLIApprovalChannel
 from shani.schemas.decision import DecisionProposal, EvidenceItem
 
-_POLICY_PATH = _ROOT / "policy" / "decision_policy.yaml"
+_POLICY_PATH = Path(__file__).parent / "policy.yaml"
 _AGENT_ID = "vuln-scan-judge/v1"
 
 # ---------------------------------------------------------------------------
@@ -215,18 +216,14 @@ def parse_osv(path: Path) -> list[Finding]:
                         installed_version=pkg_info.get("version", "unknown"),
                         fix_version=fix_version,
                         severity=severity,
-                        description=(
-                            vuln.get("summary") or vuln.get("details") or ""
-                        )[:300],
+                        description=(vuln.get("summary") or vuln.get("details") or "")[:300],
                         source="osv-scanner",
                     )
                 )
     return findings
 
 
-def load_findings(
-    trivy: list[Path], grype: list[Path], osv: list[Path]
-) -> list[Finding]:
+def load_findings(trivy: list[Path], grype: list[Path], osv: list[Path]) -> list[Finding]:
     all_findings: list[Finding] = []
     for p in trivy:
         all_findings.extend(parse_trivy(p))
@@ -240,9 +237,7 @@ def load_findings(
     seen: dict[tuple[str, str], Finding] = {}
     for f in all_findings:
         key = (f.package, f.vuln_id)
-        if key not in seen or _order.get(f.severity, 4) < _order.get(
-            seen[key].severity, 4
-        ):
+        if key not in seen or _order.get(f.severity, 4) < _order.get(seen[key].severity, 4):
             seen[key] = f
 
     return sorted(seen.values(), key=lambda f: _order.get(f.severity, 4))
@@ -284,15 +279,12 @@ def _make_proposal(f: Finding) -> DecisionProposal:
     )
 
 
-def judge(
-    findings: list[Finding], gate: HITLGate, dry_run: bool
-) -> list[JudgmentEntry]:
+def judge(findings: list[Finding], gate: HITLGate, dry_run: bool) -> list[JudgmentEntry]:
     entries: list[JudgmentEntry] = []
     for f in findings:
         ts = datetime.now(timezone.utc).isoformat()
         print(
-            f"[judge] {f.vuln_id} [{f.severity}]  "
-            f"{f.package} {f.installed_version}  ({f.source})"
+            f"[judge] {f.vuln_id} [{f.severity}]  {f.package} {f.installed_version}  ({f.source})"
         )
 
         if not f.fix_version:
@@ -338,10 +330,7 @@ def judge(
             )
         else:
             ado = result
-            print(
-                f"  → AUTHORIZED  ADO={str(ado.decision_id)[:8]}…"
-                f"  dsal={ado.authorized_dsal}"
-            )
+            print(f"  → AUTHORIZED  ADO={str(ado.decision_id)[:8]}…  dsal={ado.authorized_dsal}")
             if not dry_run:
                 gate.register_executed(ado, _AGENT_ID)
             entries.append(
@@ -368,12 +357,9 @@ def judge(
 # ---------------------------------------------------------------------------
 
 
-def write_audit(
-    entries: list[JudgmentEntry], output: Path, mode: str
-) -> int:
+def write_audit(entries: list[JudgmentEntry], output: Path, mode: str) -> int:
     counts = {
-        v: sum(1 for e in entries if e.verdict == v)
-        for v in ("authorized", "denied", "skipped")
+        v: sum(1 for e in entries if e.verdict == v) for v in ("authorized", "denied", "skipped")
     }
     audit = {
         "schema_version": "1",
@@ -405,12 +391,8 @@ def main() -> None:
     parser.add_argument("--trivy", nargs="*", default=[], metavar="FILE")
     parser.add_argument("--grype", nargs="*", default=[], metavar="FILE")
     parser.add_argument("--osv", nargs="*", default=[], metavar="FILE")
-    parser.add_argument(
-        "--policy", default=str(_POLICY_PATH), metavar="FILE"
-    )
-    parser.add_argument(
-        "--output", default="shani-audit.json", metavar="FILE"
-    )
+    parser.add_argument("--policy", default=str(_POLICY_PATH), metavar="FILE")
+    parser.add_argument("--output", default="shani-audit.json", metavar="FILE")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -446,9 +428,7 @@ def main() -> None:
 
     policy = DecisionPolicyProvider.from_yaml(Path(args.policy))
     authority = StaticAuthorityProvider(max_dsal=3)
-    evaluator = ShaniEvaluator(
-        authority_provider=authority, decision_policy=policy
-    )
+    evaluator = ShaniEvaluator(authority_provider=authority, decision_policy=policy)
 
     if auto:
         _auto_ch: CallbackApprovalChannel

@@ -53,12 +53,13 @@ class DeniedDecision:
     Carries a DenialContext explaining why the proposal was denied.
     The HITL gate converts this into an ApprovalRequest and presents it to humans.
     """
+
     decision_id: str
     reason: str
     denied_at: datetime = None
-    context: object = None          # DenialContext (typed as object to avoid circular import)
+    context: object = None  # DenialContext (typed as object to avoid circular import)
     pipeline_result: object = None  # snapshot of PipelineResult
-    proposal: object = None         # snapshot of DecisionProposal
+    proposal: object = None  # snapshot of DecisionProposal
 
     def __post_init__(self):
         object.__setattr__(self, "denied_at", datetime.now(tz=timezone.utc))
@@ -66,9 +67,9 @@ class DeniedDecision:
     def to_human_summary(self) -> dict:
         """Human-readable denial summary. Used for HITL notifications."""
         summary: dict = {
-            "reason":      self.reason,
+            "reason": self.reason,
             "decision_id": self.decision_id[:8] if self.decision_id else None,
-            "denied_at":   self.denied_at.isoformat() if self.denied_at else None,
+            "denied_at": self.denied_at.isoformat() if self.denied_at else None,
         }
         if self.pipeline_result is not None:
             pr = self.pipeline_result
@@ -81,17 +82,16 @@ class DeniedDecision:
             if pr.decision_space.framing_risk_score > 0.1:
                 summary["framing_risk"] = round(pr.decision_space.framing_risk_score, 3)
             summary["risk_breakdown"] = {
-                d.name: round(d.score, 3)
-                for d in pr.risk_score.dimensions
+                d.name: round(d.score, 3) for d in pr.risk_score.dimensions
             }
         if self.proposal is not None:
             summary["proposal"] = {
-                "decision_type":  self.proposal.decision_type.value,
-                "target":         self.proposal.target,
-                "blast_radius":   self.proposal.blast_radius.value,
-                "reversibility":  self.proposal.reversibility,
+                "decision_type": self.proposal.decision_type.value,
+                "target": self.proposal.target,
+                "blast_radius": self.proposal.blast_radius.value,
+                "reversibility": self.proposal.reversibility,
                 "evidence_count": len(self.proposal.evidence),
-                "confidence":     self.proposal.confidence,
+                "confidence": self.proposal.confidence,
             }
         return summary
 
@@ -117,36 +117,40 @@ class ShaniEvaluator:
 
     def __init__(
         self,
-        authority_provider:       AuthorityProvider,
-        decision_policy:          DecisionPolicyProvider | None = None,
-        boundary_keypair:         SigningKeypair | None = None,
-        authority_keypair:        SigningKeypair | None = None,
-        dis_machine:              DISStateMachine | None = None,
-        integrity_monitor:        DISIntegrityMonitor | None = None,
-        nonce_store:              NonceStore | None = None,
+        authority_provider: AuthorityProvider,
+        decision_policy: DecisionPolicyProvider | None = None,
+        boundary_keypair: SigningKeypair | None = None,
+        authority_keypair: SigningKeypair | None = None,
+        dis_machine: DISStateMachine | None = None,
+        integrity_monitor: DISIntegrityMonitor | None = None,
+        nonce_store: NonceStore | None = None,
         default_validity_seconds: int = 300,
-        kill_switch:              bool = False,
-        user_posture:             UserPosture | None = None,
-        org_id:                   str | None = None,
+        kill_switch: bool = False,
+        user_posture: UserPosture | None = None,
+        org_id: str | None = None,
     ) -> None:
-        self._authority    = authority_provider
-        self._policy       = decision_policy or DecisionPolicyProvider(allow_unregistered_agents=True)
-        self._dis          = dis_machine or DISStateMachine()
-        self._monitor      = integrity_monitor or DISIntegrityMonitor(self._dis)
-        self._nonce_store  = nonce_store if nonce_store is not None else InMemoryNonceStore()
+        self._authority = authority_provider
+        self._policy = decision_policy or DecisionPolicyProvider(allow_unregistered_agents=True)
+        self._dis = dis_machine or DISStateMachine()
+        self._monitor = integrity_monitor or DISIntegrityMonitor(self._dis)
+        self._nonce_store = nonce_store if nonce_store is not None else InMemoryNonceStore()
         self._default_validity = default_validity_seconds
-        self._kill_switch  = kill_switch or bool(os.environ.get("SHANI_KILL_SWITCH")) or self._policy.kill_switch_enabled
+        self._kill_switch = (
+            kill_switch
+            or bool(os.environ.get("SHANI_KILL_SWITCH"))
+            or self._policy.kill_switch_enabled
+        )
         self._user_posture = user_posture  # v0.4: optional PostureEngine stage
-        self._org_id       = org_id        # v5.1: org identity for cross-org ADO issuance
+        self._org_id = org_id  # v5.1: org identity for cross-org ADO issuance
 
-        self._boundary_keypair  = boundary_keypair  or self._default_keypair("shani-boundary")
+        self._boundary_keypair = boundary_keypair or self._default_keypair("shani-boundary")
         self._authority_keypair = authority_keypair or self._default_keypair("shani-authority")
-        self._boundary_signer   = ADOSigner(self._boundary_keypair)
-        self._authority_signer  = ADOSigner(self._authority_keypair)
+        self._boundary_signer = ADOSigner(self._boundary_keypair)
+        self._authority_signer = ADOSigner(self._authority_keypair)
         # environment_rules sourced from policy (not hardcoded)
         env_rules = getattr(self._policy, "_environment_rules", None)
-        self._dsal_calculator   = DSALCalculator(environment_rules=env_rules)
-        self._risk_pipeline     = RiskPipeline()
+        self._dsal_calculator = DSALCalculator(environment_rules=env_rules)
+        self._risk_pipeline = RiskPipeline()
         # Fan-out tracking: counts direct children issued per parent ADO decision_id
         self._child_counts: dict[str, int] = {}
 
@@ -161,6 +165,7 @@ class ShaniEvaluator:
     @property
     def boundary_public_key_b64(self) -> str:
         import base64
+
         return base64.b64encode(self._boundary_keypair.public_key_bytes).decode()
 
     # ------------------------------------------------------------------
@@ -216,6 +221,7 @@ class ShaniEvaluator:
         #     REJECT → DeniedDecision; AMBIGUOUS → PostureRefinementRequest; PASS → continue.
         if self._user_posture is not None:
             from ..schemas.posture import PostureOutcome
+
             posture_engine = PostureEngine(
                 self._user_posture,
                 risk_pipeline=self._risk_pipeline,
@@ -247,12 +253,13 @@ class ShaniEvaluator:
         #     an autonomous-agent governance layer.
         try:
             base_dsal = self._policy.required_dsal(proposal.decision_type)
-            alternatives = getattr(proposal, '_alternatives', None)
+            alternatives = getattr(proposal, "_alternatives", None)
             pipeline_result = self._risk_pipeline.evaluate(proposal, base_dsal, alternatives)
         except Exception as exc:
             logger.error(
                 "RiskPipeline FAILURE | decision=%s error=%s — denying proposal (fail-safe)",
-                proposal.decision_id[:8], exc,
+                proposal.decision_id[:8],
+                exc,
             )
             return DeniedDecision(
                 decision_id=proposal.decision_id,
@@ -266,18 +273,22 @@ class ShaniEvaluator:
 
         logger.info(
             "RiskPipeline | decision=%s\n%s",
-            proposal.decision_id[:8], pipeline_result.explain(),
+            proposal.decision_id[:8],
+            pipeline_result.explain(),
         )
 
         # rule engine: immediate DENY (hard rule)
         if pipeline_result.is_hard_denied:
             rule_name = (
                 pipeline_result.rule_result.final_deny.rule_name
-                if pipeline_result.rule_result.final_deny else "unknown"
+                if pipeline_result.rule_result.final_deny
+                else "unknown"
             )
             logger.warning(
                 "HARD DENY | decision=%s rule=%s reason=%s",
-                proposal.decision_id[:8], rule_name, pipeline_result.deny_reason,
+                proposal.decision_id[:8],
+                rule_name,
+                pipeline_result.deny_reason,
             )
             return DeniedDecision(
                 decision_id=proposal.decision_id,
@@ -379,7 +390,8 @@ class ShaniEvaluator:
         if ado.is_expired():
             logger.warning(
                 "EXPIRED ADO | decision=%s expires_at=%s",
-                ado.decision_id[:8], ado.expires_at.isoformat(),
+                ado.decision_id[:8],
+                ado.expires_at.isoformat(),
             )
             return False
 
@@ -390,7 +402,8 @@ class ShaniEvaluator:
         try:
             import json as _json
             import base64 as _b64
-            canonical = _json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
+
+            canonical = _json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
             sig_bytes = _b64.b64decode(ado.signature)
             ADOChainVerifier._verify_raw(
                 self._boundary_keypair.public_key_bytes,
@@ -400,7 +413,8 @@ class ShaniEvaluator:
         except Exception:
             logger.warning(
                 "SIGNATURE MISMATCH | decision=%s sig_prefix=%s",
-                ado.decision_id[:8], ado.signature[:12],
+                ado.decision_id[:8],
+                ado.signature[:12],
             )
             return False
 
@@ -408,8 +422,7 @@ class ShaniEvaluator:
         if proposal is not None:
             if proposal.canonical_hash() != ado.proposal_hash:
                 logger.error(
-                    "FAKE ADO DETECTED | decision=%s "
-                    "proposal_hash mismatch: ado=%s proposal=%s",
+                    "FAKE ADO DETECTED | decision=%s proposal_hash mismatch: ado=%s proposal=%s",
                     ado.decision_id[:8],
                     ado.proposal_hash[:16],
                     proposal.canonical_hash()[:16],
@@ -420,7 +433,8 @@ class ShaniEvaluator:
         if self._nonce_store.is_consumed(ado.nonce):
             logger.warning(
                 "REPLAY DETECTED | decision=%s nonce=%s",
-                ado.decision_id[:8], ado.nonce[:16],
+                ado.decision_id[:8],
+                ado.nonce[:16],
             )
             return False
 
@@ -468,8 +482,10 @@ class ShaniEvaluator:
         event = self._monitor.process(signal)
         logger.warning(
             "IntegritySignal | type=%s severity=%s dis=%s→%s",
-            event.signal.signal_type.value, event.severity.value,
-            event.dis_before.value, event.dis_after.value,
+            event.signal.signal_type.value,
+            event.severity.value,
+            event.dis_before.value,
+            event.dis_after.value,
         )
 
     def activate_kill_switch(self) -> None:
@@ -523,9 +539,7 @@ class ShaniEvaluator:
                 )
             # Validate propagated_constraints through PostureEngine (SPEC §8.8).
             # Unknown vocabulary or failed validation → PostureRefinementRequest (not DeniedDecision).
-            refinement = self._validate_propagated_constraints_via_engine(
-                proposal, parent_ado
-            )
+            refinement = self._validate_propagated_constraints_via_engine(proposal, parent_ado)
             if refinement is not None:
                 return refinement
 
@@ -581,13 +595,13 @@ class ShaniEvaluator:
         parent_ado: AuthorizedDecisionObject | None,
         effective_dsal: int,
     ) -> AuthorizedDecisionObject:
-        authority_str  = self._authority.resolve_authority(effective_dsal)
-        valid_until    = datetime.now(tz=timezone.utc) + timedelta(seconds=self._default_validity)
-        constraints    = self._derive_constraints(proposal, effective_dsal)
-        rollback       = self._build_rollback(proposal) if proposal.reversibility else None
-        intent         = self._build_intent(proposal)
-        deleg_rules    = self._build_delegation_rules(proposal, parent_ado, effective_dsal)
-        proposal_hash  = proposal.canonical_hash()
+        authority_str = self._authority.resolve_authority(effective_dsal)
+        valid_until = datetime.now(tz=timezone.utc) + timedelta(seconds=self._default_validity)
+        constraints = self._derive_constraints(proposal, effective_dsal)
+        rollback = self._build_rollback(proposal) if proposal.reversibility else None
+        intent = self._build_intent(proposal)
+        deleg_rules = self._build_delegation_rules(proposal, parent_ado, effective_dsal)
+        proposal_hash = proposal.canonical_hash()
 
         # Propagate cross-org fields (SPEC §8.8)
         origin_org: str | None = None
@@ -605,30 +619,31 @@ class ShaniEvaluator:
             origin_org = proposal.origin_org
             propagated = (
                 self._build_propagated_constraints(self._user_posture)
-                if self._user_posture is not None else []
+                if self._user_posture is not None
+                else []
             )
 
         # Build ADO (nonce auto-generated by schema default_factory)
         ado = AuthorizedDecisionObject(
-            decision_id           = proposal.decision_id,
-            authorized_dsal       = effective_dsal,
-            authority             = authority_str,
-            expires_at            = valid_until,
-            proposal_hash         = proposal_hash,
-            delegation_rules      = deleg_rules,
-            signature             = "__pending__",
-            propagated_constraints= propagated,
-            origin_org            = origin_org,
-            exec_context          = ExecContext(
-                decision_type      = proposal.decision_type,
-                intent_binding     = intent,
-                parent_decision_id = proposal.parent_decision_id,
-                constraints        = constraints,
-                rollback_policy    = rollback,
+            decision_id=proposal.decision_id,
+            authorized_dsal=effective_dsal,
+            authority=authority_str,
+            expires_at=valid_until,
+            proposal_hash=proposal_hash,
+            delegation_rules=deleg_rules,
+            signature="__pending__",
+            propagated_constraints=propagated,
+            origin_org=origin_org,
+            exec_context=ExecContext(
+                decision_type=proposal.decision_type,
+                intent_binding=intent,
+                parent_decision_id=proposal.parent_decision_id,
+                constraints=constraints,
+                rollback_policy=rollback,
             ),
         )
 
-        payload      = self._canonical_payload(ado)
+        payload = self._canonical_payload(ado)
         binding_hash = self._compute_signature(payload)
 
         # Build multi-principal signature chain: authority → boundary (SPEC §4.6 SHOULD)
@@ -636,15 +651,20 @@ class ShaniEvaluator:
         self._authority_signer.sign(payload, chain, role="authority")
         self._boundary_signer.sign(payload, chain, role="boundary")
 
-        ado = ado.model_copy(update={
-            "signature":       binding_hash,
-            "signature_chain": chain.as_dict(),
-        })
+        ado = ado.model_copy(
+            update={
+                "signature": binding_hash,
+                "signature_chain": chain.as_dict(),
+            }
+        )
 
         logger.info(
             "ADO issued | id=%s type=%s dsal=%s nonce=%s binding=%s",
-            ado.decision_id[:8], ado.exec_context.decision_type.value,
-            ado.authorized_dsal, ado.nonce[:8], binding_hash[:12],
+            ado.decision_id[:8],
+            ado.exec_context.decision_type.value,
+            ado.authorized_dsal,
+            ado.nonce[:8],
+            binding_hash[:12],
         )
         return ado
 
@@ -661,7 +681,8 @@ class ShaniEvaluator:
         """
         import json as _json
         import base64 as _b64
-        canonical = _json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
+
+        canonical = _json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         sig_bytes = self._boundary_signer._sign_raw(canonical)
         return _b64.b64encode(sig_bytes).decode()
 
@@ -690,23 +711,23 @@ class ShaniEvaluator:
         dr = ado.delegation_rules
         return {
             # Identity
-            "decision_id":     ado.decision_id,
+            "decision_id": ado.decision_id,
             # Integrity
-            "proposal_hash":   ado.proposal_hash,
+            "proposal_hash": ado.proposal_hash,
             # Authorization
-            "authority":       ado.authority,
+            "authority": ado.authority,
             "authorized_dsal": ado.authorized_dsal,
             # Escalation prevention — all four bounds
             "delegation_rules": {
                 "allowed_sub_decisions": sorted(dr.allowed_sub_decisions),
-                "max_child_dsal":        dr.max_child_dsal,
-                "max_depth":             dr.max_depth,
-                "max_children":          dr.max_children,
+                "max_child_dsal": dr.max_child_dsal,
+                "max_depth": dr.max_depth,
+                "max_children": dr.max_children,
             },
             # Replay prevention
             "nonce": ado.nonce,
             # Temporal
-            "issued_at":  ado.issued_at.isoformat(),
+            "issued_at": ado.issued_at.isoformat(),
             "expires_at": ado.expires_at.isoformat(),
             # Execution context — execution drift prevention
             # MUST be signed: covers decision_type, intent_binding.target,
@@ -716,23 +737,22 @@ class ShaniEvaluator:
             "exec_context": {
                 "decision_type": ec.decision_type.value,
                 "intent_binding": {
-                    "intent":          ec.intent_binding.intent,
-                    "target":          ec.intent_binding.target,
-                    "scope_summary":   ec.intent_binding.scope_summary,
+                    "intent": ec.intent_binding.intent,
+                    "target": ec.intent_binding.target,
+                    "scope_summary": ec.intent_binding.scope_summary,
                     "expected_effect": ec.intent_binding.expected_effect,
-                    "reversibility":   ec.intent_binding.reversibility,
+                    "reversibility": ec.intent_binding.reversibility,
                 },
                 "parent_decision_id": ec.parent_decision_id,
-                "constraints":        ec.constraints,
+                "constraints": ec.constraints,
                 # rollback_policy: nullable nested object; omitted to avoid
                 # serialisation ambiguity. Covered indirectly by proposal_hash.
             },
             # v5.1: cross-org propagated constraints (SPEC §8.8)
             # Included in signed payload — mutation breaks signature verification.
             "propagated_constraints": sorted(ado.propagated_constraints),
-            "origin_org":             ado.origin_org,
+            "origin_org": ado.origin_org,
         }
-
 
     def _build_delegation_rules(
         self,
@@ -758,9 +778,7 @@ class ShaniEvaluator:
         # This ensures delegation cannot grant access to types requiring higher authority
         # than the child D-SAL allows (SPEC §4.3, §8.7).
         allowed: list[str] = [
-            dt.value
-            for dt in DecisionType
-            if self._policy.required_dsal(dt) <= max_child
+            dt.value for dt in DecisionType if self._policy.required_dsal(dt) <= max_child
         ]
 
         # If the parent ADO restricts sub-decisions, intersect to prevent escalation.
@@ -816,6 +834,7 @@ class ShaniEvaluator:
     def _check_prod_reversibility(self, proposal: DecisionProposal) -> "DeniedDecision | None":
         """Deny irreversible ops on production targets when prod_reversibility is enabled (SPEC §8.3)."""
         import re
+
         ac = self._policy.org_policy.absolute_constraints
         if not ac.prod_reversibility:
             return None
@@ -843,9 +862,14 @@ class ShaniEvaluator:
             f"minimum_evidence:{c.minimum_evidence}",
         ]
 
-    _KNOWN_CONSTRAINT_KEYS: frozenset = frozenset([
-        "target_scope", "max_blast_radius", "reversibility_required", "minimum_evidence",
-    ])
+    _KNOWN_CONSTRAINT_KEYS: frozenset = frozenset(
+        [
+            "target_scope",
+            "max_blast_radius",
+            "reversibility_required",
+            "minimum_evidence",
+        ]
+    )
 
     @staticmethod
     def _validate_propagated_constraints(constraints: list[str]) -> list[str]:
@@ -885,7 +909,8 @@ class ShaniEvaluator:
         if unknown:
             logger.warning(
                 "CROSS-ORG AMBIGUOUS | decision=%s unknown_vocab=%s",
-                proposal.decision_id[:8], unknown,
+                proposal.decision_id[:8],
+                unknown,
             )
             return PostureRefinementRequest(
                 proposal_id=proposal.decision_id,
@@ -936,7 +961,8 @@ class ShaniEvaluator:
         if outcome == PostureOutcome.REJECT:
             logger.warning(
                 "CROSS-ORG REJECT | decision=%s origin=%s propagated_constraints=%s",
-                proposal.decision_id[:8], parent_ado.origin_org,
+                proposal.decision_id[:8],
+                parent_ado.origin_org,
                 parent_ado.propagated_constraints,
             )
             return PostureRefinementRequest(
@@ -971,6 +997,7 @@ class ShaniEvaluator:
         Falls back to boundary-only verification if no chain is stored.
         """
         from ..crypto.signing import ADOChainVerifier, ADOSignatureChain, ADOSignature
+
         if ado.signature_chain is None:
             # No chain stored — verify boundary signature only
             ok = self.verify_binding(ado)
@@ -978,14 +1005,10 @@ class ShaniEvaluator:
         try:
             chain_data = ado.signature_chain
             chain = ADOSignatureChain(
-                signatures=[
-                    ADOSignature(**s) for s in chain_data.get("signatures", [])
-                ]
+                signatures=[ADOSignature(**s) for s in chain_data.get("signatures", [])]
             )
             payload = self._canonical_payload(ado)
-            return ADOChainVerifier.verify(
-                payload, chain, expected_roles=["authority", "boundary"]
-            )
+            return ADOChainVerifier.verify(payload, chain, expected_roles=["authority", "boundary"])
         except Exception as exc:
             return False, f"Chain verification failed: {exc}"
 
@@ -993,7 +1016,8 @@ class ShaniEvaluator:
     def _default_keypair(principal_id: str) -> SigningKeypair:
         import hashlib
         import warnings
-        env_key = os.environ.get(f"SHANI_{principal_id.upper().replace('-','_')}_KEY")
+
+        env_key = os.environ.get(f"SHANI_{principal_id.upper().replace('-', '_')}_KEY")
         if env_key:
             seed = hashlib.sha256(env_key.encode()).digest()
         else:

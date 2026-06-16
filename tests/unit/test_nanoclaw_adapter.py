@@ -1,19 +1,20 @@
 """
 tests/unit/test_nanoclaw_adapter.py
 
-nanoclaw アダプターのユニットテスト。
+Unit tests for the nanoclaw adapter.
 
 Tests:
-  - read ツール → D-SAL 1 → 即時承認
-  - execute ツール → blast_radius SIGNIFICANT → HITL 待機または拒否
-  - 拒否 → PermissionError が送出される
-  - patch_nanoclaw_agent: dict 形式の tools をパッチ
-  - patch_nanoclaw_agent: list 形式の tools をパッチ
-  - 未知ツール名 → デフォルトポリシーが適用される
-  - agent_task が decision_policy.yaml に存在する
-  - agent_task が DEFAULT_DECISION_POLICY に存在する
-  - agent_task が CapabilityMatrix._FALLBACK に存在する
+  - read tool → D-SAL 1 → immediate approval
+  - execute tool → blast_radius SIGNIFICANT → HITL wait or deny
+  - deny → PermissionError is raised
+  - patch_nanoclaw_agent: patch tools in dict format
+  - patch_nanoclaw_agent: patch tools in list format
+  - unknown tool name → default policy is applied
+  - agent_task exists in decision_policy.yaml
+  - agent_task exists in DEFAULT_DECISION_POLICY
+  - agent_task exists in CapabilityMatrix._FALLBACK
 """
+
 from __future__ import annotations
 
 import os
@@ -27,6 +28,7 @@ except ImportError:
     import types as _t
     import importlib.util as _iu
     import pathlib as _pl
+
     _spec = _iu.spec_from_file_location(
         "_compat",
         str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"),
@@ -39,6 +41,7 @@ except ImportError:
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from shani import ShaniEvaluator, StaticAuthorityProvider, DeniedDecision
@@ -58,9 +61,17 @@ FAIL = "\033[91m✗\033[0m"
 _failures: list[str] = []
 
 
-def ok(msg): print(f"  {PASS} {msg}")
-def fail(msg, d=""): _failures.append(msg); print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
-def section(t): print(f"\n  ── {t}")
+def ok(msg):
+    print(f"  {PASS} {msg}")
+
+
+def fail(msg, d=""):
+    _failures.append(msg)
+    print(f"  {FAIL} {msg}" + (f"\n      {d}" if d else ""))
+
+
+def section(t):
+    print(f"\n  ── {t}")
 
 
 def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
@@ -69,12 +80,14 @@ def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
         "nanoclaw-agent/v1": AgentIdentity(
             agent_id="nanoclaw-agent/v1",
             granted_dsal=3,
-            allowed_decision_types=frozenset([
-                DecisionType.AGENT_TASK.value,
-                DecisionType.DATA_ACCESS.value,
-                DecisionType.CONFIGURATION_CHANGE.value,
-                DecisionType.REMEDIATION.value,
-            ]),
+            allowed_decision_types=frozenset(
+                [
+                    DecisionType.AGENT_TASK.value,
+                    DecisionType.DATA_ACCESS.value,
+                    DecisionType.CONFIGURATION_CHANGE.value,
+                    DecisionType.REMEDIATION.value,
+                ]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -91,7 +104,7 @@ def make_gate(hitl_dsal: int = 3) -> tuple[HITLGate, CallbackApprovalChannel]:
 
 
 def test_read_tool_approved():
-    section("read ツール → 即時承認")
+    section("read tool → immediate approval")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniNanoclawAdapter(gate=gate, proposed_by="nanoclaw-agent/v1")
 
@@ -102,13 +115,13 @@ def test_read_tool_approved():
     )
 
     if result == "report:https://api.example.com/report":
-        ok("fetch_report 即時承認: 結果正しい")
+        ok("fetch_report immediate approval: result correct")
     else:
-        fail("fetch_report: 予期せぬ結果", str(result))
+        fail("fetch_report: unexpected result", str(result))
 
 
 def test_write_tool_approved():
-    section("write ツール → 即時承認 (D-SAL=2, threshold=3)")
+    section("write tool → immediate approval (D-SAL=2, threshold=3)")
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniNanoclawAdapter(gate=gate, proposed_by="nanoclaw-agent/v1")
 
@@ -120,14 +133,14 @@ def test_write_tool_approved():
     )
 
     if result == "ok" and len(written) == 1:
-        ok("write_config 即時承認")
+        ok("write_config immediate approval")
     else:
-        fail("write_config 失敗", str(result))
+        fail("write_config failed", str(result))
 
 
 def test_denied_raises_permission_error():
-    section("拒否 → PermissionError")
-    # HITL 閾値 D-SAL 1 → agent_task (D-SAL=1) も HITL になる
+    section("deny → PermissionError")
+    # HITL threshold D-SAL 1 → agent_task (D-SAL=1) also goes to HITL
     gate, _ = make_gate(hitl_dsal=1)
     adapter = ShaniNanoclawAdapter(gate=gate, proposed_by="nanoclaw-agent/v1")
 
@@ -136,19 +149,19 @@ def test_denied_raises_permission_error():
             tool_name="run_command",
             tool_fn=lambda cmd: "output",
             kwargs={"cmd": "rm -rf /tmp"},
-            # 低 confidence → deny ルールに引っかかる可能性あり
+            # low confidence → may trigger deny rule
             confidence=0.1,
         )
-        ok("run_command 承認（evaluator 依存）")
+        ok("run_command approved (evaluator dependent)")
     except PermissionError as e:
-        ok(f"run_command 拒否 → PermissionError: {str(e)[:60]}")
+        ok(f"run_command denied → PermissionError: {str(e)[:60]}")
     except Exception as e:
-        # HITL 待機中のタイムアウトなど
-        ok(f"run_command 例外（許容）: {type(e).__name__}")
+        # HITL timeout etc.
+        ok(f"run_command exception (acceptable): {type(e).__name__}")
 
 
 def test_patch_nanoclaw_agent_dict_tools():
-    section("patch_nanoclaw_agent: dict 形式 tools")
+    section("patch_nanoclaw_agent: dict format tools")
     gate, _ = make_gate(hitl_dsal=3)
 
     class FakeNanoclawAgent:
@@ -156,27 +169,27 @@ def test_patch_nanoclaw_agent_dict_tools():
 
     agent = FakeNanoclawAgent()
     agent.tools = {
-        "fetch":  lambda url: f"fetched:{url}",
+        "fetch": lambda url: f"fetched:{url}",
         "search": lambda q: f"results:{q}",
     }
 
     patch_nanoclaw_agent(agent=agent, gate=gate, proposed_by="nanoclaw-agent/v1")
 
     if isinstance(agent.tools, dict) and len(agent.tools) == 2:
-        ok(f"tools dict パッチ完了: {sorted(agent.tools.keys())}")
+        ok(f"tools dict patch complete: {sorted(agent.tools.keys())}")
     else:
-        fail("tools dict パッチ失敗", str(type(agent.tools)))
+        fail("tools dict patch failed", str(type(agent.tools)))
 
-    # パッチ済みツールを実行
+    # Execute patched tool
     result = agent.tools["fetch"](url="https://api.example.com")
     if "fetched" in str(result):
-        ok(f"パッチ済み fetch 実行OK: {result}")
+        ok(f"patched fetch executed OK: {result}")
     else:
-        fail("パッチ済み fetch 実行失敗", str(result))
+        fail("patched fetch execution failed", str(result))
 
 
 def test_patch_nanoclaw_agent_list_tools():
-    section("patch_nanoclaw_agent: list 形式 tools")
+    section("patch_nanoclaw_agent: list format tools")
     gate, _ = make_gate(hitl_dsal=3)
 
     class FakeNanoclawAgent:
@@ -195,13 +208,13 @@ def test_patch_nanoclaw_agent_list_tools():
     patch_nanoclaw_agent(agent=agent, gate=gate, proposed_by="nanoclaw-agent/v1")
 
     if isinstance(agent.tools, list) and len(agent.tools) == 2:
-        ok(f"tools list パッチ完了: 2 ツール")
+        ok(f"tools list patch complete: 2 tools")
     else:
-        fail("tools list パッチ失敗", str(agent.tools))
+        fail("tools list patch failed", str(agent.tools))
 
 
 def test_no_tools_attribute():
-    section("tools 属性なし → 警告のみ（エラーなし）")
+    section("no tools attribute → warning only (no error)")
     gate, _ = make_gate()
 
     class FakeNoToolsAgent:
@@ -210,14 +223,15 @@ def test_no_tools_attribute():
     agent = FakeNoToolsAgent()
     try:
         patch_nanoclaw_agent(agent=agent, gate=gate, proposed_by="nanoclaw-agent/v1")
-        ok("tools なし → 警告のみ（エラーなし）")
+        ok("no tools → warning only (no error)")
     except Exception as e:
-        fail("tools なし → 予期せぬ例外", str(e))
+        fail("no tools → unexpected exception", str(e))
 
 
 def test_tool_policy_override():
-    section("ポリシー上書き → CONFIGURATION_CHANGE")
+    section("policy override → CONFIGURATION_CHANGE")
     from shani.schemas.decision import DecisionType, BlastRadius
+
     gate, _ = make_gate(hitl_dsal=3)
     adapter = ShaniNanoclawAdapter(gate=gate, proposed_by="nanoclaw-agent/v1")
 
@@ -231,66 +245,69 @@ def test_tool_policy_override():
     )
 
     if called:
-        ok(f"ポリシー上書き実行OK: {called[0]}")
+        ok(f"policy override executed OK: {called[0]}")
     else:
-        fail("ポリシー上書き実行失敗")
+        fail("policy override execution failed")
 
 
 def test_agent_task_in_defaults():
-    section("agent_task が Python デフォルトに存在する")
+    section("agent_task exists in Python defaults")
     if "agent_task" in DEFAULT_DECISION_POLICY:
         ok(f"DEFAULT_DECISION_POLICY['agent_task']={DEFAULT_DECISION_POLICY['agent_task']}")
     else:
-        fail("DEFAULT_DECISION_POLICY に agent_task が存在しない")
+        fail("agent_task not found in DEFAULT_DECISION_POLICY")
 
     if "agent_task" in CapabilityMatrix._FALLBACK:
         ops = sorted(CapabilityMatrix._FALLBACK["agent_task"])
         ok(f"CapabilityMatrix._FALLBACK['agent_task']={ops}")
     else:
-        fail("CapabilityMatrix._FALLBACK に agent_task が存在しない")
+        fail("agent_task not found in CapabilityMatrix._FALLBACK")
 
 
 def test_agent_task_in_policy_yaml():
-    section("agent_task が decision_policy.yaml に存在する")
+    section("agent_task exists in decision_policy.yaml")
     try:
         import yaml
+
         p = os.path.join(os.path.dirname(__file__), "../../policy/decision_policy.yaml")
         with open(p) as f:
             data = yaml.safe_load(f)
         dp = data.get("decision_policy", {})
         if "agent_task" in dp:
-            ok(f"decision_policy.yaml に agent_task={dp['agent_task']}")
+            ok(f"agent_task={dp['agent_task']} found in decision_policy.yaml")
         else:
-            fail("decision_policy.yaml に agent_task が存在しない")
+            fail("agent_task not found in decision_policy.yaml")
 
         cm = data.get("capability_matrix", {})
         if "agent_task" in cm:
             ops = cm["agent_task"].get("operations", [])
-            ok(f"capability_matrix に agent_task: ops={ops}")
+            ok(f"agent_task found in capability_matrix: ops={ops}")
         else:
-            fail("capability_matrix に agent_task が存在しない")
+            fail("agent_task not found in capability_matrix")
 
         reg = data.get("agent_registry", {})
         if "nanoclaw-agent/v1" in reg:
-            ok("agent_registry に nanoclaw-agent/v1 が存在する")
+            ok("nanoclaw-agent/v1 found in agent_registry")
         else:
-            fail("agent_registry に nanoclaw-agent/v1 が存在しない")
+            fail("nanoclaw-agent/v1 not found in agent_registry")
     except ImportError:
-        ok("pyyaml 未インストール → スキップ（CI で確認される）")
+        ok("pyyaml not installed → skipped (verified in CI)")
 
 
 def test_nanoclaw_tool_policy_coverage():
-    section("NANOCLAW_TOOL_POLICY が全 NanoclawToolAction をカバーする")
+    section("NANOCLAW_TOOL_POLICY covers all NanoclawToolAction")
     from shani.adapters.nanoclaw import NanoclawToolAction
+
     for action in NanoclawToolAction:
         if action in NANOCLAW_TOOL_POLICY:
             dt, br, rev = NANOCLAW_TOOL_POLICY[action]
             ok(f"{action.value}: type={dt.value} blast={br.value} reversible={rev}")
         else:
-            fail(f"NANOCLAW_TOOL_POLICY に {action.value} が存在しない")
+            fail(f"{action.value} not found in NANOCLAW_TOOL_POLICY")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     print("\ntest_nanoclaw_adapter.py")

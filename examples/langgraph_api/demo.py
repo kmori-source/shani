@@ -31,15 +31,19 @@ try:
     import pydantic  # noqa
 except ImportError:
     import types as _t, importlib.util as _iu, pathlib as _pl
-    _spec = _iu.spec_from_file_location("_compat",
-        str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py"))
-    _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+
+    _spec = _iu.spec_from_file_location(
+        "_compat", str(_pl.Path(__file__).parent.parent.parent / "shani/_compat.py")
+    )
+    _mod = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
     _shim = _t.ModuleType("pydantic")
     for _k in ("BaseModel", "Field", "field_validator", "model_validator"):
         setattr(_shim, _k, getattr(_mod, _k))
     sys.modules["pydantic"] = _shim
 
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning, module="shani")
 
 from datetime import datetime, timedelta, timezone
@@ -60,17 +64,19 @@ from shani.boundary.capability import ExecutionBoundary, CapabilityError
 # State
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class AgentState(TypedDict):
-    messages:   Annotated[list, add_messages]
-    query:      str
+    messages: Annotated[list, add_messages]
+    query: str
     api_result: str
-    summary:    str
-    shani_log:  list[str]
+    summary: str
+    shani_log: list[str]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Shani + Boundary setup
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_gate() -> tuple[HITLGate, CallbackApprovalChannel]:
     channel = CallbackApprovalChannel()
@@ -78,9 +84,9 @@ def build_gate() -> tuple[HITLGate, CallbackApprovalChannel]:
         "langgraph-agent/v1": AgentIdentity(
             agent_id="langgraph-agent/v1",
             granted_dsal=2,
-            allowed_decision_types=frozenset([
-                "data_access", "configuration_change", "remediation"
-            ]),
+            allowed_decision_types=frozenset(
+                ["data_access", "configuration_change", "remediation"]
+            ),
         )
     }
     evaluator = ShaniEvaluator(
@@ -113,11 +119,13 @@ def request_capability(
 
     evidence = []
     if evidence_text:
-        evidence = [EvidenceItem(
-            source="agent-observation",
-            content=evidence_text,
-            confidence=0.85,
-        )]
+        evidence = [
+            EvidenceItem(
+                source="agent-observation",
+                content=evidence_text,
+                confidence=0.85,
+            )
+        ]
 
     proposal = DecisionProposal(
         decision_type=decision_type,
@@ -146,11 +154,13 @@ def request_capability(
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def get_llm():
     ollama_model = os.environ.get("OLLAMA_MODEL")
     if ollama_model:
         try:
             from langchain_ollama import ChatOllama
+
             print(f"  [LLM] Ollama ({ollama_model})")
             return ChatOllama(model=ollama_model, temperature=0)
         except ImportError:
@@ -158,6 +168,7 @@ def get_llm():
 
     if os.environ.get("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
+
         print("  [LLM] OpenAI GPT-4o")
         return ChatOpenAI(model="gpt-4o", temperature=0)
 
@@ -169,15 +180,16 @@ class MockLLM:
     def invoke(self, messages):
         last = messages[-1].content if messages else ""
         if "summarize" in last.lower() or "summary" in last.lower():
-            return AIMessage(content=(
-                "3 items found. Latency 38ms, no errors. Operating normally."
-            ))
+            return AIMessage(
+                content=("3 items found. Latency 38ms, no errors. Operating normally.")
+            )
         return AIMessage(content=f"Processing query: {last[:40]}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Nodes
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def search_node(state: AgentState, gate: HITLGate, boundary: ExecutionBoundary) -> AgentState:
     """GET node. Can only be called via cap.http_get()."""
@@ -188,7 +200,8 @@ def search_node(state: AgentState, gate: HITLGate, boundary: ExecutionBoundary) 
     print(f"\n  [search] Approval request (D-SAL 1) → {target_url[:55]}")
 
     cap, err = request_capability(
-        gate=gate, boundary=boundary,
+        gate=gate,
+        boundary=boundary,
         decision_type=DecisionType.DATA_ACCESS,
         target=target_url,
         description=f"External API search for: {query}.",
@@ -205,27 +218,34 @@ def search_node(state: AgentState, gate: HITLGate, boundary: ExecutionBoundary) 
     print(f"  [search] ✓ Complete: {data[:60]}")
     log.append(f"✅ GET (D-SAL 1, auto) | {cap}")
 
-    return {**state, "api_result": data,
-            "messages": [AIMessage(content=f"Fetched: {data}")], "shani_log": log}
+    return {
+        **state,
+        "api_result": data,
+        "messages": [AIMessage(content=f"Fetched: {data}")],
+        "shani_log": log,
+    }
 
 
 def summarize_node(
-    state: AgentState, gate: HITLGate,
-    boundary: ExecutionBoundary, llm,
+    state: AgentState,
+    gate: HITLGate,
+    boundary: ExecutionBoundary,
+    llm,
 ) -> AgentState:
     """LLM summarize → POST node. Can only be called via cap.http_post()."""
     api_result = state.get("api_result", "")
     target_url = "https://api.example.com/reports"
     log = list(state.get("shani_log", []))
 
-    summary = llm.invoke([
-        HumanMessage(content=f"Summarize the following data: {api_result}")
-    ]).content
+    summary = llm.invoke(
+        [HumanMessage(content=f"Summarize the following data: {api_result}")]
+    ).content
     print(f"\n  [summarize] LLM: {summary[:60]}")
     print(f"  [summarize] Approval request (D-SAL 2, HITL) → {target_url}")
 
     cap, err = request_capability(
-        gate=gate, boundary=boundary,
+        gate=gate,
+        boundary=boundary,
         decision_type=DecisionType.CONFIGURATION_CHANGE,
         target=target_url,
         description="POST summary report to external API.",
@@ -242,13 +262,18 @@ def summarize_node(
     print(f"  [summarize] ✓ Complete: id={result['id']}")
     log.append(f"✅ POST (D-SAL 2, HITL) | {cap}")
 
-    return {**state, "summary": summary,
-            "messages": [AIMessage(content=f"Saved: {result['id']}")], "shani_log": log}
+    return {
+        **state,
+        "summary": summary,
+        "messages": [AIMessage(content=f"Saved: {result['id']}")],
+        "shani_log": log,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Boundary enforcement tests
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_bypass_attempts(boundary: ExecutionBoundary):
     print("\n  ── Boundary bypass tests ───────────────────────────")
@@ -257,6 +282,7 @@ def test_bypass_attempts(boundary: ExecutionBoundary):
     print("  1. Direct Capability() construction:")
     try:
         from shani.boundary.capability import Capability
+
         Capability(object(), None, {"http_get"}, "https://")
         print("     ✗ construction succeeded (design bug)")
     except Exception as e:
@@ -265,6 +291,7 @@ def test_bypass_attempts(boundary: ExecutionBoundary):
     # 2. Attempt issue_capability with fake ADO
     print("  2. Fake ADO with issue_capability():")
     try:
+
         class FakeADO:
             decision_id = "fake-000"
             signature = "invalid_signature"
@@ -272,10 +299,14 @@ def test_bypass_attempts(boundary: ExecutionBoundary):
             nonce = "00" * 32
             issued_at = datetime.now(tz=timezone.utc)
             expires_at = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
-            def is_expired(self): return False
+
+            def is_expired(self):
+                return False
+
             class exec_context:
                 class decision_type:
                     value = "data_access"
+
                 class intent_binding:
                     target = "https://api.example.com"
 
@@ -290,6 +321,7 @@ def test_bypass_attempts(boundary: ExecutionBoundary):
 # ─────────────────────────────────────────────────────────────────────────────
 # HITL auto-response
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def start_auto_approver(channel: CallbackApprovalChannel, action: str = "approve"):
     def loop():
@@ -311,12 +343,14 @@ def start_auto_approver(channel: CallbackApprovalChannel, action: str = "approve
                 else:
                     channel.deny(req.request_id, "operator@example.com", "rejected")
                     print("  → ✗ Denied")
+
     threading.Thread(target=loop, daemon=True).start()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def run(query: str = "latest metrics", hitl_action: str = "approve"):
     print("\n" + "=" * 57)
@@ -331,7 +365,7 @@ def run(query: str = "latest metrics", hitl_action: str = "approve"):
     start_auto_approver(channel, hitl_action)
 
     builder = StateGraph(AgentState)
-    builder.add_node("search",    lambda s: search_node(s, gate, boundary))
+    builder.add_node("search", lambda s: search_node(s, gate, boundary))
     builder.add_node("summarize", lambda s: summarize_node(s, gate, boundary, llm))
     builder.add_edge(START, "search")
     builder.add_edge("search", "summarize")
@@ -341,13 +375,15 @@ def run(query: str = "latest metrics", hitl_action: str = "approve"):
     print(f"\n  Query: {query} / HITL: {hitl_action}")
     print("  Running graph...")
 
-    final = graph.invoke({
-        "messages":   [HumanMessage(content=query)],
-        "query":      query,
-        "api_result": "",
-        "summary":    "",
-        "shani_log":  [],
-    })
+    final = graph.invoke(
+        {
+            "messages": [HumanMessage(content=query)],
+            "query": query,
+            "api_result": "",
+            "summary": "",
+            "shani_log": [],
+        }
+    )
 
     print("\n" + "─" * 57)
     print("  [Results]")
@@ -365,6 +401,7 @@ def run(query: str = "latest metrics", hitl_action: str = "approve"):
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser()
     p.add_argument("--query", default="system metrics for prod-cluster")
     p.add_argument("--deny", action="store_true")

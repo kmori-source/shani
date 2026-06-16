@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,7 +15,7 @@
       color: #1a202c;
     }
 
-    /* ── ヘッダー ── */
+    /* ── Header ── */
     header {
       display: flex;
       align-items: center;
@@ -34,7 +34,7 @@
     #status-dot.ok { background: #48bb78; }
     #status-dot.error { background: #fc8181; }
 
-    /* ── コンテンツ ── */
+    /* ── Content ── */
     #content { padding: 10px 12px; }
 
     #empty {
@@ -43,7 +43,7 @@
       color: #718096;
     }
 
-    /* ── 承認カード ── */
+    /* ── Approval card ── */
     .card {
       background: #fff;
       border: 1px solid #e2e8f0;
@@ -116,7 +116,7 @@
     .btn-approve { background: #48bb78; color: #fff; }
     .btn-deny { background: #fc8181; color: #fff; }
 
-    /* ── フッター ── */
+    /* ── Footer ── */
     footer {
       padding: 6px 12px;
       font-size: 11px;
@@ -130,15 +130,15 @@
   <header>
     <span class="logo">🔐</span>
     <h1>Shani Governance</h1>
-    <div id="status-dot" title="Sidecar 接続状態"></div>
+    <div id="status-dot" title="Sidecar connection status"></div>
   </header>
 
   <div id="content">
-    <div id="empty">承認待ちのリクエストはありません</div>
+    <div id="empty">No pending approval requests</div>
     <div id="cards"></div>
   </div>
 
-  <footer id="footer">サイドカー: http://127.0.0.1:7891 | 3秒ごとに更新</footer>
+  <footer id="footer">Sidecar: http://127.0.0.1:7891 | Updates every 3 seconds</footer>
 
   <script src="popup.js"></script>
 </body>
