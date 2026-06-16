@@ -1,14 +1,14 @@
 """
 examples/vuln-remediation/scenario.py
 
-脆弱性スキャン + Auto Remediation governed by Shani.
+Vulnerability Scan + Auto Remediation governed by Shani.
 
 Flow:
-  脆弱性検知 (pip-audit)
-    → LangGraph agent (remediation 提案)
-    → Shani (承認・HITL・ADO 発行)
+  Detect vulnerabilities  (pip-audit)
+    → LangGraph agent (remediation)
+    → Shani (Approval・HITL・ADO)
     → 実行 (pip install --upgrade)
-    → audit.json (誰が承認したか・何をしたか)
+    → audit.json (Who approved?)
 
 Run:
     python scenario.py                      # interactive HITL
