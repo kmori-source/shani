@@ -1,14 +1,14 @@
 """
 examples/vuln-remediation/scenario.py
 
-脆弱性スキャン + Auto Remediation governed by Shani.
+Vulnerability Scan + Auto Remediation governed by Shani.
 
 Flow:
-  脆弱性検知 (pip-audit)
-    → LangGraph agent (remediation 提案)
-    → Shani (承認・HITL・ADO 発行)
+  Detect vulnerabilities  (pip-audit)
+    → LangGraph agent (remediation)
+    → Shani (Approval・HITL・ADO)
     → 実行 (pip install --upgrade)
-    → audit.json (誰が承認したか・何をしたか)
+    → audit.json (Who approved?)
 
 Run:
     python scenario.py                      # interactive HITL
@@ -161,20 +161,15 @@ def _cvss_to_severity(score: float | None) -> str:
 # 2. Remediation proposal builder
 # ---------------------------------------------------------------------------
 
+# Severity → BlastRadius mapping.
+# Package upgrades modify the filesystem and affect runtime behavior.
+# Even MEDIUM findings warrant LIMITED blast radius (requires HITL at D-SAL >= 2).
 _SEVERITY_BLAST: dict[str, BlastRadius] = {
-<<<<<<< Updated upstream
-    "CRITICAL": BlastRadius.SIGNIFICANT,
-    "HIGH":     BlastRadius.LIMITED,
-    "MEDIUM":   BlastRadius.ISOLATED,
-    "LOW":      BlastRadius.ISOLATED,
-=======
     "CRITICAL": BlastRadius.CRITICAL,  # D-SAL 3-4, always requires HITL
     "HIGH": BlastRadius.SIGNIFICANT,  # D-SAL 2-3, requires HITL
     "MEDIUM": BlastRadius.LIMITED,  # D-SAL 2, requires HITL
     "LOW": BlastRadius.ISOLATED,  # D-SAL 1, auto-approved
->>>>>>> Stashed changes
 }
-
 
 def make_proposal(f: VulnFinding) -> DecisionProposal:
     return DecisionProposal(

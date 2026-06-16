@@ -4,7 +4,7 @@
 # No binding declarations required — suitable for CI/CD pipelines.
 
 decision_policy:
-  remediation:          1
+  remediation:          2
   configuration_change: 2
   data_access:          1
   network_action:       3
