@@ -1,0 +1,41 @@
+# docker-compose.yml for Shani Vulnerability Judge
+#
+# Usage:
+#   # Run with Trivy scan + Shani judgment
+#   docker compose run --rm shani-judge
+#
+#   # Dry run (scan only, no execution)
+#   SHANI_DRY_RUN=1 docker compose run --rm shani-judge
+
+services:
+  # Trivy scanner
+  trivy:
+    image: aquasec/trivy:latest
+    volumes:
+      - .:/workspace
+      - trivy-cache:/root/.cache/trivy
+    command: >
+      fs --format json
+      --scanners vuln
+      --output /workspace/trivy.json
+      /workspace
+    profiles: ["scan"]
+
+  # Shani judgment
+  shani-judge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+    environment:
+      SHANI_HITL_AUTO: ${SHANI_HITL_AUTO:-1}
+      SHANI_DRY_RUN: ${SHANI_DRY_RUN:-0}
+      AUDIT_OUTPUT: /workspace/shani-audit.json
+    command: >
+      --trivy /workspace/trivy.json
+      --output /workspace/shani-audit.json
+    depends_on: []
+
+volumes:
+  trivy-cache:

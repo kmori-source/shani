@@ -1,0 +1,105 @@
+# Pattern 1: In-Pod Sidecar
+#
+# Place the nanoclaw container and shani-sidecar container in the same Pod.
+# Containers in the same Pod share a network namespace, so they can communicate via localhost.
+#
+# Scale-out: Simply increase the Deployment replicas to replicate
+#   nanoclaw + shani-sidecar pairs.
+# HITL state: in-memory (independent instances equivalent to replicas=1).
+#   If centralized HITL across multiple Pods is needed, consider Pattern 2.
+#
+# Usage:
+#   kubectl apply -f k8s-pod-sidecar.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanoclaw-with-shani-sidecar
+  labels:
+    app: nanoclaw-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nanoclaw-agent
+  template:
+    metadata:
+      labels:
+        app: nanoclaw-agent
+    spec:
+      containers:
+
+        # ── nanoclaw agent container ──────────────────────────────────────────
+        - name: nanoclaw-agent
+          image: nanoclaw:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # Connect to shani-sidecar via localhost
+            - name: SHANI_HOST
+              value: "localhost"
+            - name: SHANI_PORT
+              value: "8765"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+        # ── Shani sidecar container ───────────────────────────────────────────
+        - name: shani-sidecar
+          image: shani:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8765
+              name: http
+          env:
+            # Bind on 0.0.0.0 within the Pod (nanoclaw connects via localhost)
+            - name: SHANI_HOST
+              value: "0.0.0.0"
+            - name: SHANI_PORT
+              value: "8765"
+            # Require operator approval at D-SAL 2 or above
+            - name: HITL_DSAL
+              value: "2"
+            # Signing key (change to a Secret reference in production)
+            # - name: SHANI_SHANI_BOUNDARY_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: shani-secrets
+            #       key: boundary_key
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
+---
+# (Optional) Service for the nanoclaw agent
+# Create only if other services need to reach the agent
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanoclaw-agent
+spec:
+  selector:
+    app: nanoclaw-agent
+  ports:
+    - name: agent
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,79 @@
+name: RFC — Design Proposal
+description: Propose a significant change to Shani's architecture or behavior
+title: "RFC: "
+labels: ["rfc", "design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, confirm this change does NOT violate any design invariant.
+        Read CONTRIBUTING.md in full first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What specific problem does this solve? Be concrete.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Philosophy check — this RFC does NOT
+      description: All must be checked. If any is false, reconsider the approach.
+      options:
+        - label: Make Shani into a planner, optimizer, or executor
+          required: true
+        - label: Allow agents to declare their own D-SAL (no `requested_dsal`)
+          required: true
+        - label: Hardcode capability matrix, environment keywords, or authority roles in Python code
+          required: true
+        - label: Remove DenialContext from any denial path
+          required: true
+        - label: Conflate risk_score (continuous) with D-SAL (discrete governance level)
+          required: true
+        - label: Contradict a MUST requirement in spec/shani-v0.4.md
+          required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What changes are you proposing? Code sketches welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider? Why did you reject them?
+    validations:
+      required: true
+
+  - type: textarea
+    id: threat_model
+    attributes:
+      label: Threat model impact
+      description: |
+        Does this change affect any threat in docs/THREAT_MODEL.md?
+        Does it introduce new attack surfaces?
+    validations:
+      required: true
+
+  - type: textarea
+    id: policy_yaml
+    attributes:
+      label: Could this be done via policy.yaml instead?
+      description: |
+        Shani's design principle: policy lives in YAML, not code.
+        If this change adds new configurable behavior, can it be exposed via policy.yaml?
+
+  - type: textarea
+    id: spec_changes
+    attributes:
+      label: Spec changes required
+      description: |
+        Which sections of spec/shani-v0.4.md would need to change?
+        List the section numbers and what would change.

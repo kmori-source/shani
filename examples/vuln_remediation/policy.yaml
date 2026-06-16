@@ -1,0 +1,70 @@
+# policy/vuln_remediation_policy.yaml
+#
+# Minimal policy for vulnerability scan judgment (shani_vuln_judge.py).
+# No binding declarations required — suitable for CI/CD pipelines.
+
+decision_policy:
+  remediation:          1
+  configuration_change: 2
+  data_access:          1
+  network_action:       3
+  delegation:           3
+  policy_update:        4
+
+capability_matrix:
+  remediation:
+    operations: [run_command, http_post, write_file]
+    note: "Package upgrades and patches."
+  configuration_change:
+    operations: [http_post, http_put, write_file]
+    note: "Configuration writes."
+  data_access:
+    operations: [http_get, read_file]
+    note: "Read-only."
+  network_action:
+    operations: [http_get, http_post, http_put]
+    note: "Network ops."
+  delegation:
+    operations: [http_post]
+    note: "Delegation only."
+  policy_update:
+    operations: [http_post, http_put, write_file]
+    note: "Policy updates. Always D-SAL 4."
+
+environment_rules:
+  high_risk_keywords:
+    - prod
+    - production
+    - live
+    - prd
+    - customer-data
+    - main-cluster
+
+authority_roles:
+  0: "any-operator"
+  1: "SOC-Analyst"
+  2: "SecOps-Lead"
+  3: "Org-Policy"
+  4: "Board-Level"
+
+allow_unregistered_agents: false
+
+agent_registry:
+  vuln-scan-judge/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - remediation
+      - configuration_change
+    metadata:
+      team: soc
+      environment: ci
+  vuln-remediation-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - remediation
+    metadata:
+      team: soc
+      environment: ci
+
