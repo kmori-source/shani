@@ -78,7 +78,7 @@ if HITL_AUTO in ("approve", "deny"):
 else:
     print("[HITL] Manual mode — approve via /v1/approve endpoint or set SHANI_HITL_AUTO=approve")
 
-server = ShaniSidecarServer(gate=gate, host="0.0.0.0", port=8765)
+server = ShaniSidecarServer(gate=gate, channel=channel, host="0.0.0.0", port=8765)
 print("Shani sidecar listening on 0.0.0.0:8765")
 server.serve_forever()
 

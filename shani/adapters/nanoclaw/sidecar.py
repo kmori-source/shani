@@ -63,10 +63,12 @@ class ShaniSidecarServer:
     def __init__(
         self,
         gate: Any,
+        channel: Any = None,
         host: str | None = None,
         port: int | None = None,
     ) -> None:
         self._gate = gate
+        self._channel = channel
         self._host = host if host is not None else os.environ.get("SHANI_HOST", _DEFAULT_HOST)
         self._port = (
             port if port is not None else int(os.environ.get("SHANI_PORT", str(_DEFAULT_PORT)))
@@ -85,6 +87,7 @@ class ShaniSidecarServer:
     def serve_forever(self) -> None:
         """Start the HTTP server and block."""
         gate = self._gate
+        channel = self._channel
 
         class _Handler(BaseHTTPRequestHandler):
             def log_message(self, fmt, *args):  # noqa: N802
@@ -116,6 +119,10 @@ class ShaniSidecarServer:
                         self._handle_verify_binding()
                     elif self.path == "/v1/register_executed":
                         self._handle_register_executed()
+                    elif self.path == "/v1/approve":
+                        self._handle_approve()
+                    elif self.path == "/v1/deny":
+                        self._handle_deny()
                     else:
                         self._send_json({"error": "not found"}, 404)
                 except Exception as exc:
@@ -165,6 +172,52 @@ class ShaniSidecarServer:
                         "and replay prevention (SPEC §5.4)."
                     )
                 self._send_json({"ok": True})
+
+            def _handle_approve(self):
+                # Approve a pending HITL request.
+                # Accepts both full UUID and 8-char short ID.
+                data = self._read_json()
+                request_id = data["request_id"]
+                authority = data.get("authority", "operator")
+                note = data.get("note", "")
+                if channel is None:
+                    raise ValueError("No channel configured on this sidecar.")
+                if len(request_id) <= 8:
+                    matches = [
+                        r.request_id for r in channel.get_all()
+                        if r.request_id.startswith(request_id)
+                    ]
+                    if len(matches) == 1:
+                        request_id = matches[0]
+                    elif len(matches) == 0:
+                        raise KeyError(f"No request found for short ID: {request_id}")
+                    else:
+                        raise KeyError(f"Ambiguous short ID: {request_id} matches {matches}")
+                channel.approve(request_id, authority, note)
+                self._send_json({"ok": True, "request_id": request_id})
+
+            def _handle_deny(self):
+                # Deny a pending HITL request.
+                # Accepts both full UUID and 8-char short ID.
+                data = self._read_json()
+                request_id = data["request_id"]
+                authority = data.get("authority", "operator")
+                note = data.get("note", "")
+                if channel is None:
+                    raise ValueError("No channel configured on this sidecar.")
+                if len(request_id) <= 8:
+                    matches = [
+                        r.request_id for r in channel.get_all()
+                        if r.request_id.startswith(request_id)
+                    ]
+                    if len(matches) == 1:
+                        request_id = matches[0]
+                    elif len(matches) == 0:
+                        raise KeyError(f"No request found for short ID: {request_id}")
+                    else:
+                        raise KeyError(f"Ambiguous short ID: {request_id} matches {matches}")
+                channel.deny(request_id, authority, note)
+                self._send_json({"ok": True, "request_id": request_id})
 
         self._server = ThreadingHTTPServer((self._host, self._port), _Handler)
         logger.info("ShaniSidecarServer listening on %s:%d", self._host, self._port)
