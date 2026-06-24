@@ -46,7 +46,6 @@ warnings.filterwarnings("ignore")
 
 from shani import DeniedDecision, DecisionType, BlastRadius
 from shani.schemas.decision import AuthorizedDecisionObject, EvidenceItem
-from shani.schemas.posture import PostureRefinementRequest
 
 from framework import ConformanceSuite
 from fixtures import (
@@ -169,12 +168,12 @@ def test_child_cannot_exceed_propagated_scope(suite: ConformanceSuite) -> None:
         spec_ref="SPEC §8.8",
     )
 
-    # Should be PostureRefinementRequest (AMBIGUOUS), not DeniedDecision
-    is_refinement = isinstance(result, PostureRefinementRequest)
+    # Should be DeniedDecision (REJECT), not PostureRefinementRequest
+    is_denied = isinstance(result, DeniedDecision)
     suite.must_fail(
-        "propagated_scope:out_of_scope_is_refinement",
-        condition=is_refinement,
-        description="scope violation via propagated_constraints → PostureRefinementRequest",
+        "propagated_scope:out_of_scope_is_denied",
+        condition=is_denied,
+        description="scope violation via propagated_constraints → DeniedDecision",
         detail=f"got {type(result).__name__}",
         spec_ref="SPEC §8.8",
     )

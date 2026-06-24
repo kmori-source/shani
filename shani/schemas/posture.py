@@ -101,15 +101,13 @@ class UserPosture(BaseModel):
             },
         }
 
-    def sign(self, keypair: Any, simulation_store: "dict | None" = None) -> "UserPosture":
+    def sign(self, keypair: Any, simulation_store: dict) -> "UserPosture":
         """Return a new UserPosture with a cryptographic signature (Ed25519/HMAC-SHA256).
 
-        simulation_store: mapping of simulation_id → PostureSimulationResult.
-        Conforming implementations MUST pass this to enforce that PostureSimulation
-        was run before signing (SPEC §8.6 — prevents Binding Theater).
-        When provided, raises ValueError if simulation_ref is not found in the store.
+        simulation_store: required mapping of simulation_id → PostureSimulationResult.
+        Raises ValueError if simulation_ref is not found in the store (SPEC §8.6 MUST).
         """
-        if simulation_store is not None and self.simulation_ref not in simulation_store:
+        if self.simulation_ref not in simulation_store:
             raise ValueError(
                 f"UserPosture simulation_ref '{self.simulation_ref}' does not reference a "
                 "known PostureSimulationResult (SPEC §8.6). "

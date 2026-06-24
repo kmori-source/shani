@@ -648,6 +648,68 @@ def test_org_policy_absolute_constraints():
 
 
 # ---------------------------------------------------------------------------
+# 8. sign() enforces simulation_store requirement (SPEC §8.6 MUST)
+# ---------------------------------------------------------------------------
+
+
+def test_sign_requires_simulation_store():
+    section("UserPosture.sign() — simulation_store is required (SPEC §8.6 MUST)")
+
+    posture = make_posture(simulation_ref="sim-test-001")
+
+    # sign() without simulation_store argument → TypeError (required argument)
+    try:
+        posture.sign("fake-keypair")
+        fail("sign() without simulation_store should raise TypeError")
+    except TypeError:
+        ok("sign() without simulation_store → TypeError (required argument, SPEC §8.6)")
+
+    # sign() with empty store (simulation_ref not in store) → ValueError
+    try:
+        posture.sign("fake-keypair", {})
+        fail("sign() with simulation_ref not in store should raise ValueError")
+    except ValueError as e:
+        if "SPEC §8.6" in str(e):
+            ok("sign() with simulation_ref not in store → ValueError citing SPEC §8.6")
+        else:
+            fail("sign() ValueError should reference SPEC §8.6", str(e))
+
+    # sign() with wrong simulation_ref → ValueError
+    wrong_store = {"other-sim-id": object()}
+    try:
+        posture.sign("fake-keypair", wrong_store)
+        fail("sign() with mismatched simulation_ref should raise ValueError")
+    except ValueError:
+        ok("sign() with mismatched simulation_ref → ValueError")
+
+    # validate_user_posture: simulation_store membership check enforced when store is provided
+    policy = DecisionPolicyProvider(allow_unregistered_agents=True)
+    posture_with_sig = make_posture(simulation_ref="sim-xyz")
+
+    # Without store: non-empty simulation_ref passes (signature is chain-of-trust)
+    ok_flag, _ = policy.validate_user_posture(posture_with_sig)
+    if ok_flag:
+        ok("validate_user_posture without store: non-empty simulation_ref → accepted")
+    else:
+        fail("validate_user_posture without store should accept non-empty simulation_ref")
+
+    # With store that lacks the ref: must be rejected
+    ok_flag, reason = policy.validate_user_posture(posture_with_sig, simulation_store={})
+    if not ok_flag and "SPEC §8.6" in reason:
+        ok("validate_user_posture with store missing ref → REJECTED (SPEC §8.6)")
+    else:
+        fail("validate_user_posture with store missing ref should be rejected", reason)
+
+    # With store that contains the ref: accepted
+    valid_store = {"sim-xyz": object()}
+    ok_flag, _ = policy.validate_user_posture(posture_with_sig, simulation_store=valid_store)
+    if ok_flag:
+        ok("validate_user_posture with store containing ref → accepted")
+    else:
+        fail("validate_user_posture with matching store ref should be accepted")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -664,6 +726,7 @@ if __name__ == "__main__":
     test_cross_org_propagated_constraints()
     test_posture_simulation()
     test_org_policy_absolute_constraints()
+    test_sign_requires_simulation_store()
 
     print("\n" + "=" * 60)
     if _failures:

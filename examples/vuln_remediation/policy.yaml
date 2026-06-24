@@ -1,10 +1,13 @@
+# SPDX-FileCopyrightText: 2026 kmori-source
+# SPDX-License-Identifier: Apache-2.0
+#
 # policy/vuln_remediation_policy.yaml
 #
 # Minimal policy for vulnerability scan judgment (shani_vuln_judge.py).
 # No binding declarations required — suitable for CI/CD pipelines.
 
 decision_policy:
-  remediation:          1
+  remediation:          2
   configuration_change: 2
   data_access:          1
   network_action:       3

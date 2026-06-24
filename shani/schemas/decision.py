@@ -154,6 +154,14 @@ class EvidenceItem(BaseModel):
     content: str
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     raw_reference: str | None = Field(default=None)
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Free-form structured metadata about this evidence item. "
+            "Used by PolicyEngine rules to classify blast_radius "
+            "(e.g. {'severity': 'HIGH', 'files_changed': ['parser.c']})."
+        ),
+    )
     signature: str | None = Field(
         default=None,
         description=(

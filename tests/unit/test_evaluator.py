@@ -387,6 +387,73 @@ def test_agent_cannot_declare_dsal():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cross-org propagated constraints
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_cross_org_reject_returns_denied_decision():
+    section("Cross-org REJECT → DeniedDecision (not PostureRefinementRequest)")
+    from shani.core.evaluator import PostureRefinementRequest
+    from shani.schemas.decision import (
+        AuthorizedDecisionObject, DelegationRules, ExecContext, IntentBinding,
+    )
+    import uuid as _uuid
+
+    ev = make_evaluator()
+    issued = datetime.now(tz=timezone.utc)
+    expires = issued + timedelta(hours=1)
+
+    def make_cross_org_ado(constraints):
+        return AuthorizedDecisionObject(
+            decision_id=_uuid.uuid4().hex,
+            proposal_hash="testhash",
+            signature="testsig",
+            authority="Board-Level",
+            authorized_dsal=4,
+            delegation_rules=DelegationRules(
+                allowed_sub_decisions=["remediation"],
+                max_child_dsal=3,
+                max_depth=1,
+                max_children=5,
+            ),
+            issued_at=issued,
+            expires_at=expires,
+            exec_context=ExecContext(
+                decision_type=DecisionType.REMEDIATION,
+                intent_binding=IntentBinding(
+                    intent="cross-org op",
+                    target="org:beta",
+                    scope_summary="domestic-only",
+                    expected_effect="Propagate constraints",
+                    reversibility=True,
+                ),
+            ),
+            propagated_constraints=constraints,
+            origin_org="org-alpha",
+        )
+
+    # REJECT: reversibility_required:true but proposal is irreversible
+    irreversible = make_proposal(reversibility=False)
+    parent_ado = make_cross_org_ado(["reversibility_required:true"])
+    result = ev._validate_propagated_constraints_via_engine(irreversible, parent_ado)
+    assert isinstance(result, DeniedDecision), (
+        f"Expected DeniedDecision for cross-org REJECT, got {type(result).__name__}"
+    )
+    assert not isinstance(result, PostureRefinementRequest), (
+        "REJECT must not return PostureRefinementRequest"
+    )
+    ok(f"REJECT → DeniedDecision ✓: {result.reason[:60]}")
+
+    # PASS: reversible proposal satisfies reversibility_required:true
+    reversible = make_proposal(reversibility=True)
+    result_pass = ev._validate_propagated_constraints_via_engine(reversible, parent_ado)
+    assert result_pass is None, (
+        f"Expected None for cross-org PASS, got {type(result_pass).__name__}"
+    )
+    ok("PASS → None ✓")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -531,6 +598,7 @@ if __name__ == "__main__":
     test_denial_context_is_populated()
     test_effective_dsal_increases_with_risk()
     test_agent_cannot_declare_dsal()
+    test_cross_org_reject_returns_denied_decision()
     test_capability_is_single_use()
     test_capability_thread_safe_single_use()
 
