@@ -176,7 +176,7 @@ def evaluate_admission(review: dict[str, Any]) -> dict[str, Any]:
             "response": {
                 "uid": uid,
                 "allowed": False,
-                "status": {"code": 500, "message": "Shani internal error"},
+                "status": {"code": 500, "message": f"Shani internal error: {exc}"},
             },
         }
 

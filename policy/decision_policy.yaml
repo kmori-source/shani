@@ -124,23 +124,6 @@ agent_registry:
     metadata:
       team: soc
       environment: production
-    # v0.4 Binding declaration (SPEC §8.7) — treated as signed document, not config.
-    # Requires simulation_ref to reference a completed PostureSimulation.
-    binding:
-      version: "1.0"
-      principal_id: "soc-lead@example.com"
-      signed_at: "2026-05-01T09:00:00Z"
-      intent_statement: "I delegate automated remediation and configuration changes to this agent for dev environments only."
-      simulation_ref: "sim-2026-05-01-monitor-agent-v1"
-      posture:
-        target_scope: "host:dev-.*"
-        max_blast_radius: limited
-        reversibility_required: true
-        minimum_evidence: 1
-      history:
-        - version: "0.9"
-          signed_at: "2026-04-01T10:00:00Z"
-          note: "Initial declaration."
 
   network-scanner-agent/v0.9:
     granted_dsal: 1
@@ -193,6 +176,15 @@ agent_registry:
       - configuration_change
     metadata:
       adapter: cowork
+
+  vuln-remediation-agent/v1:
+    granted_dsal: 2
+    public_key_b64: null
+    allowed_decision_types:
+      - remediation
+    metadata:
+      team: security
+      description: "Autonomous vulnerability scan + patch remediation agent"
 
 # -----------------------------------------------------------------------
 # Section 5: Environment Rules

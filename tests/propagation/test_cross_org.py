@@ -49,7 +49,6 @@ warnings.filterwarnings("ignore")
 from shani import DeniedDecision, DecisionType, BlastRadius
 from shani.authority.policy import OrgPolicy, OrgPolicyAbsoluteConstraints
 from shani.schemas.decision import AuthorizedDecisionObject, DelegationRules, EvidenceItem
-from shani.schemas.posture import PostureRefinementRequest
 
 from framework import ConformanceSuite
 from fixtures import (
@@ -221,24 +220,14 @@ def test_cross_org_scope_violation(suite: ConformanceSuite) -> None:
         spec_ref="SPEC §8.8",
     )
 
-    is_refinement = isinstance(result, PostureRefinementRequest)
+    is_denied = isinstance(result, DeniedDecision)
     suite.must_fail(
-        "scope_violation:is_refinement",
-        condition=is_refinement,
-        description="scope violation → PostureRefinementRequest (requires originator resolution)",
+        "scope_violation:is_denied",
+        condition=is_denied,
+        description="scope violation → DeniedDecision (cross-org constraint violation)",
         detail=f"got {type(result).__name__}",
         spec_ref="SPEC §8.8",
     )
-
-    if is_refinement:
-        has_principal = result.principal_id == "org-alpha"
-        suite.must_fail(
-            "scope_violation:refinement_targets_origin",
-            condition=has_principal,
-            description="PostureRefinementRequest.principal_id is the originating org",
-            detail=f"got {result.principal_id!r}",
-            spec_ref="SPEC §8.8",
-        )
 
 
 # ---------------------------------------------------------------------------
