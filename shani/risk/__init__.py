@@ -1,4 +1,5 @@
 from .assessor import RiskAssessor, RiskScore, RiskDimension
+from .blast_radius_policy import PolicyEngine, PolicyResult, RuleMatch, max_severity
 from .dsal_mapper import DSALMapper, DSALMapping
 from .rules import RuleEngine, RuleResult, RuleOutcome, RuleOutcomeType, Rule
 from .evidence import (
@@ -20,6 +21,10 @@ from .decision_space import DecisionSpaceAnalyzer, DecisionSpaceAnalysis, Altern
 from .pipeline import RiskPipeline, PipelineResult
 
 __all__ = [
+    "PolicyEngine",
+    "PolicyResult",
+    "RuleMatch",
+    "max_severity",
     "RiskAssessor",
     "RiskScore",
     "RiskDimension",

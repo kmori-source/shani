@@ -1,0 +1,68 @@
+# blast_radius_policy/default.yaml
+#
+# Default blast_radius policy for Shani.
+# Reproduces the two existing behaviors (pip-audit D-SAL2 mapping,
+# oss-crs patch heuristics) as declarative rules so integrations only
+# need to report evidence facts - Shani decides the consequence.
+#
+# Severity levels (least to most severe): isolated < limited < significant < critical
+
+defaults:
+  data_access: isolated
+  configuration_change: limited
+  remediation: significant
+  network_action: significant
+
+rules:
+  # pip-audit: map CVE severity to blast_radius (D-SAL ladder)
+  - id: pip-audit-medium-severity
+    description: "pip-audit reports MEDIUM severity vulnerability"
+    match:
+      proposed_by_prefix: "pip-audit"
+      metadata:
+        severity: "MEDIUM"
+    blast_radius: limited
+
+  - id: pip-audit-high-severity
+    description: "pip-audit reports HIGH severity vulnerability"
+    match:
+      proposed_by_prefix: "pip-audit"
+      metadata:
+        severity: "HIGH"
+    blast_radius: significant
+
+  - id: pip-audit-critical-severity
+    description: "pip-audit reports CRITICAL severity vulnerability"
+    match:
+      proposed_by_prefix: "pip-audit"
+      metadata:
+        severity: "CRITICAL"
+    blast_radius: critical
+
+  # oss-crs patch builder: scope-based classification
+  - id: patch-apply-small
+    description: "oss-crs patch touching <= 100 lines (scoped, low-risk change)"
+    match:
+      proposed_by_prefix: "oss-crs-builder"
+      metadata:
+        action_class: "patch_apply"
+        total_lines_changed: {lte: 100}
+    blast_radius: limited
+
+  - id: patch-apply-large
+    description: "oss-crs patch touching > 100 lines (broad change)"
+    match:
+      proposed_by_prefix: "oss-crs-builder"
+      metadata:
+        action_class: "patch_apply"
+        total_lines_changed: {gt: 100}
+    blast_radius: significant
+
+  - id: patch-apply-cicd-files
+    description: "oss-crs patch touching CI/CD or infrastructure files"
+    match:
+      proposed_by_prefix: "oss-crs-builder"
+      metadata:
+        action_class: "patch_apply"
+        files_changed_any_glob: ["*.yml", "*.yaml", "Dockerfile*"]
+    blast_radius: significant

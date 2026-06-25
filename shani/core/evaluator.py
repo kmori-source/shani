@@ -37,8 +37,7 @@ from ..crypto.signing import ADOChainVerifier, ADOSignatureChain, ADOSigner, Sig
 from ..integrity.monitor import DISIntegrityMonitor, IntegritySignal
 from ..authority.policy import DecisionPolicyProvider
 from ..authority.dsal_calculator import DSALCalculator
-from ..risk.pipeline import RiskPipeline, PipelineResult
-from ..risk.decision_space import Alternative
+from ..risk.pipeline import RiskPipeline
 from ..posture.engine import PostureEngine
 from ..security.replay_store import InMemoryNonceStore, NonceAlreadyConsumed, NonceStore
 
@@ -56,12 +55,12 @@ class DeniedDecision:
 
     decision_id: str
     reason: str
-    denied_at: datetime = None
-    context: object = None  # DenialContext (typed as object to avoid circular import)
-    pipeline_result: object = None  # snapshot of PipelineResult
-    proposal: object = None  # snapshot of DecisionProposal
+    denied_at: datetime | None = None
+    context: Any | None = None  # DenialContext (typed as Any to avoid circular import)
+    pipeline_result: Any | None = None  # snapshot of PipelineResult
+    proposal: Any | None = None  # snapshot of DecisionProposal
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "denied_at", datetime.now(tz=timezone.utc))
 
     def to_human_summary(self) -> dict:
@@ -243,6 +242,7 @@ class ShaniEvaluator:
                     "POSTURE AMBIGUOUS | decision=%s → PostureRefinementRequest",
                     proposal.decision_id[:8],
                 )
+                assert refinement_request is not None
                 return refinement_request
 
         # 5b. Risk Pipeline: compute effective D-SAL via 4 components
@@ -446,7 +446,7 @@ class ShaniEvaluator:
 
     def register_executed(
         self,
-        ado_or_id,
+        ado_or_id: Any,
         agent_id: str = "",
     ) -> None:
         """
@@ -538,7 +538,7 @@ class ShaniEvaluator:
                     f"(OrgPolicy.cross_org_min_dsal), but effective D-SAL is {effective_dsal}.",
                 )
             # Validate propagated_constraints through PostureEngine (SPEC §8.8).
-            # Unknown vocabulary or failed validation → PostureRefinementRequest (not DeniedDecision).
+            # REJECT → DeniedDecision; AMBIGUOUS → PostureRefinementRequest.
             refinement = self._validate_propagated_constraints_via_engine(proposal, parent_ado)
             if refinement is not None:
                 return refinement
@@ -666,7 +666,7 @@ class ShaniEvaluator:
             ado.nonce[:8],
             binding_hash[:12],
         )
-        return ado
+        return ado  # type: ignore[no-any-return]
 
     def _compute_signature(self, payload: dict) -> str:
         """
@@ -885,13 +885,12 @@ class ShaniEvaluator:
         self,
         proposal: DecisionProposal,
         parent_ado: AuthorizedDecisionObject,
-    ) -> "PostureRefinementRequest | None":
+    ) -> "DeniedDecision | PostureRefinementRequest | None":
         """
         Validate propagated_constraints through PostureEngine (SPEC §8.8).
 
-        Returns PostureRefinementRequest if validation fails or is ambiguous,
+        Returns DeniedDecision if REJECT, PostureRefinementRequest if AMBIGUOUS,
         None if the proposal satisfies all propagated constraints.
-        Unknown vocabulary → PostureRefinementRequest (not DeniedDecision).
         """
         from ..schemas.posture import PostureConstraints, PostureOutcome, UserPosture
         from datetime import datetime, timezone
@@ -965,16 +964,14 @@ class ShaniEvaluator:
                 parent_ado.origin_org,
                 parent_ado.propagated_constraints,
             )
-            return PostureRefinementRequest(
-                proposal_id=proposal.decision_id,
-                principal_id=parent_ado.origin_org or "unknown",
-                ambiguity=(
+            return DeniedDecision(
+                decision_id=proposal.decision_id,
+                reason=(
                     f"Proposal rejected by cross-org propagated_constraints "
                     f"from {parent_ado.origin_org!r}. The originating principal's "
                     "posture constraints prohibit this action."
                 ),
-                matched_constraints=refinement.matched_constraints if refinement else [],
-                unresolved=refinement.unresolved if refinement else [],
+                proposal=proposal,
             )
 
         # AMBIGUOUS
